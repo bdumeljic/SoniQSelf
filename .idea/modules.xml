@@ -4,6 +4,7 @@
     <modules>
       <module fileurl="file://$PROJECT_DIR$/SoniQSelf.iml" filepath="$PROJECT_DIR$/SoniQSelf.iml" />
       <module fileurl="file://$PROJECT_DIR$/app/app.iml" filepath="$PROJECT_DIR$/app/app.iml" />
+      <module fileurl="file://$PROJECT_DIR$/mididriver/mididriver.iml" filepath="$PROJECT_DIR$/mididriver/mididriver.iml" />
     </modules>
   </component>
 </project>

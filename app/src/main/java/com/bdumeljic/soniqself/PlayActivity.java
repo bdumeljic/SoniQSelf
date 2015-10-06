@@ -3,6 +3,7 @@ package com.bdumeljic.soniqself;
 import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.IntentSender;
+import android.media.MediaPlayer;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
@@ -28,6 +29,10 @@ import com.google.android.gms.fitness.request.DataReadRequest;
 import com.google.android.gms.fitness.request.SessionReadRequest;
 import com.google.android.gms.fitness.result.DataReadResult;
 
+import org.billthefarmer.mididriver.GeneralMidiConstants;
+import org.billthefarmer.mididriver.MidiConstants;
+import org.billthefarmer.mididriver.MidiDriver;
+
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
@@ -39,7 +44,8 @@ import java.util.concurrent.TimeUnit;
  * An example full-screen activity that shows and hides the system UI (i.e.
  * status bar and navigation/system bar) with user interaction.
  */
-public class PlayActivity extends AppCompatActivity {
+public class PlayActivity extends AppCompatActivity implements View.OnTouchListener, View.OnClickListener,
+        MidiDriver.OnMidiStartListener {
     private static String TAG = "PlayActivity";
     private static final String DATE_FORMAT = "yyyy.MM.dd HH:mm:ss";
     public static final String SAMPLE_SESSION_NAME = "Afternoon run";
@@ -70,14 +76,17 @@ public class PlayActivity extends AppCompatActivity {
     private static final int REQUEST_OAUTH = 1;
 
     /**
-     *  Track whether an authorization activity is stacking over the current activity, i.e. when
-     *  a known auth error is being resolved, such as showing the account chooser or presenting a
-     *  consent dialog. This avoids common duplications as might happen on screen rotations, etc.
+     * Track whether an authorization activity is stacking over the current activity, i.e. when
+     * a known auth error is being resolved, such as showing the account chooser or presenting a
+     * consent dialog. This avoids common duplications as might happen on screen rotations, etc.
      */
     private static final String AUTH_PENDING = "auth_state_pending";
     private boolean authInProgress = false;
 
     private GoogleApiClient mClient = null;
+
+    protected MidiDriver midi;
+    protected MediaPlayer player;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -88,6 +97,9 @@ public class PlayActivity extends AppCompatActivity {
         }
 
         buildFitnessClient();
+
+        midi = new MidiDriver();
+
 
         setContentView(R.layout.activity_play);
 
@@ -108,6 +120,29 @@ public class PlayActivity extends AppCompatActivity {
         // operations to prevent the jarring behavior of controls going away
         // while interacting with the UI.
         findViewById(R.id.dummy_button).setOnTouchListener(mDelayHideTouchListener);
+
+
+        // Set on touch listener
+
+        View v = findViewById(R.id.button1);
+        if (v != null)
+            v.setOnTouchListener(this);
+
+        v = findViewById(R.id.button2);
+        if (v != null)
+            v.setOnTouchListener(this);
+
+        v = findViewById(R.id.button3);
+        if (v != null)
+            v.setOnClickListener(this);
+
+        v = findViewById(R.id.button4);
+        if (v != null)
+            v.setOnClickListener(this);
+
+        if (midi != null) {
+            midi.setOnMidiStartListener(this);
+        }
     }
 
     @Override
@@ -217,12 +252,12 @@ public class PlayActivity extends AppCompatActivity {
     }
 
     /**
-     *  Build a {@link GoogleApiClient} that will authenticate the user and allow the application
-     *  to connect to Fitness APIs. The scopes included should match the scopes your app needs
-     *  (see documentation for details). Authentication will occasionally fail intentionally,
-     *  and in those cases, there will be a known resolution, which the OnConnectionFailedListener()
-     *  can address. Examples of this include the user never having signed in before, or having
-     *  multiple accounts on the device and needing to specify which account to use, etc.
+     * Build a {@link GoogleApiClient} that will authenticate the user and allow the application
+     * to connect to Fitness APIs. The scopes included should match the scopes your app needs
+     * (see documentation for details). Authentication will occasionally fail intentionally,
+     * and in those cases, there will be a known resolution, which the OnConnectionFailedListener()
+     * can address. Examples of this include the user never having signed in before, or having
+     * multiple accounts on the device and needing to specify which account to use, etc.
      */
     private void buildFitnessClient() {
         // Create the Google API Client
@@ -323,13 +358,13 @@ public class PlayActivity extends AppCompatActivity {
     }
 
     /**
-     *  Create a {@link DataSet} to insert data into the History API, and
-     *  then create and execute a {@link DataReadRequest} to verify the insertion succeeded.
-     *  By using an {@link AsyncTask}, we can schedule synchronous calls, so that we can query for
-     *  data after confirming that our insert was successful. Using asynchronous calls and callbacks
-     *  would not guarantee that the insertion had concluded before the read request was made.
-     *  An example of an asynchronous call using a callback can be found in the example
-     *  on deleting data below.
+     * Create a {@link DataSet} to insert data into the History API, and
+     * then create and execute a {@link DataReadRequest} to verify the insertion succeeded.
+     * By using an {@link AsyncTask}, we can schedule synchronous calls, so that we can query for
+     * data after confirming that our insert was successful. Using asynchronous calls and callbacks
+     * would not guarantee that the insertion had concluded before the read request was made.
+     * An example of an asynchronous call using a callback can be found in the example
+     * on deleting data below.
      */
     private class InsertAndVerifyDataTask extends AsyncTask<Void, Void, Void> {
         protected Void doInBackground(Void... params) {
@@ -476,7 +511,7 @@ public class PlayActivity extends AppCompatActivity {
             Log.i(TAG, "\tType: " + dp.getDataType().getName());
             Log.i(TAG, "\tStart: " + dateFormat.format(dp.getStartTime(TimeUnit.MILLISECONDS)));
             Log.i(TAG, "\tEnd: " + dateFormat.format(dp.getEndTime(TimeUnit.MILLISECONDS)));
-            for(Field field : dp.getDataType().getFields()) {
+            for (Field field : dp.getDataType().getFields()) {
                 Log.i(TAG, "\tField: " + field.getName() +
                         " Value: " + dp.getValue(field));
             }
@@ -491,4 +526,146 @@ public class PlayActivity extends AppCompatActivity {
                 + "\n\tEnd: " + dateFormat.format(session.getEndTime(TimeUnit.MILLISECONDS)));
     }
 
+    // On resume
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // Start midi
+
+        if (midi != null)
+            midi.start();
+    }
+
+    // On pause
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+
+        // Stop midi
+
+        if (midi != null)
+            midi.stop();
+
+        // Stop player
+
+        if (player != null)
+            player.stop();
+    }
+
+    // On touch
+
+    @Override
+    public boolean onTouch(View v, MotionEvent event) {
+        int action = event.getAction();
+        int id = v.getId();
+
+        switch (action) {
+            // Down
+
+            case MotionEvent.ACTION_DOWN:
+                switch (id) {
+                    case R.id.button1:
+                        sendMidi(MidiConstants.NOTE_ON, 48, 63);
+                        sendMidi(MidiConstants.NOTE_ON, 52, 63);
+                        sendMidi(MidiConstants.NOTE_ON, 55, 63);
+                        break;
+
+                    case R.id.button2:
+                        sendMidi(MidiConstants.NOTE_ON, 55, 63);
+                        sendMidi(MidiConstants.NOTE_ON, 59, 63);
+                        sendMidi(MidiConstants.NOTE_ON, 62, 63);
+                        break;
+
+                    default:
+                        return false;
+                }
+                break;
+
+            // Up
+
+            case MotionEvent.ACTION_UP:
+                switch (id) {
+                    case R.id.button1:
+                        sendMidi(MidiConstants.NOTE_OFF, 48, 0);
+                        sendMidi(MidiConstants.NOTE_OFF, 52, 0);
+                        sendMidi(MidiConstants.NOTE_OFF, 55, 0);
+                        break;
+
+                    case R.id.button2:
+                        sendMidi(MidiConstants.NOTE_OFF, 55, 0);
+                        sendMidi(MidiConstants.NOTE_OFF, 59, 0);
+                        sendMidi(MidiConstants.NOTE_OFF, 62, 0);
+                        break;
+
+                    default:
+                        return false;
+                }
+                break;
+
+            default:
+                return false;
+        }
+
+        return false;
+    }
+
+    // On click
+
+    @Override
+    public void onClick(View v) {
+        int id = v.getId();
+
+        switch (id) {
+            case R.id.button3:
+                if (player != null) {
+                    player.stop();
+                    player.release();
+                }
+
+                player = MediaPlayer.create(this, R.raw.ants);
+                player.start();
+                break;
+
+            case R.id.button4:
+                if (player != null)
+                    player.stop();
+                break;
+        }
+    }
+
+    // Listener for sending initial midi messages when the Sonivox
+    // synthesizer has been started, such as program change.
+
+    @Override
+    public void onMidiStart() {
+        // Program change - harpsicord
+
+        sendMidi(MidiConstants.PROGRAM_CHANGE, GeneralMidiConstants.HARPSICHORD);
+    }
+
+    // Send a midi message
+
+    protected void sendMidi(int m, int p) {
+        byte msg[] = new byte[2];
+
+        msg[0] = (byte) m;
+        msg[1] = (byte) p;
+
+        midi.queueEvent(msg);
+    }
+
+    // Send a midi message
+
+    protected void sendMidi(int m, int n, int v) {
+        byte msg[] = new byte[3];
+
+        msg[0] = (byte) m;
+        msg[1] = (byte) n;
+        msg[2] = (byte) v;
+
+        midi.queueEvent(msg);
+    }
 }
