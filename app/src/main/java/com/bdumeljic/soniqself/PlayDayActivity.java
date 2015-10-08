@@ -1,17 +1,17 @@
 package com.bdumeljic.soniqself;
 
-import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.media.MediaPlayer;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
-import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.Button;
+import android.widget.TextView;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
@@ -30,7 +30,6 @@ import com.google.android.gms.fitness.request.SessionReadRequest;
 import com.google.android.gms.fitness.result.DataReadResult;
 import com.google.android.gms.fitness.result.SessionReadResult;
 
-import org.billthefarmer.mididriver.GeneralMidiConstants;
 import org.billthefarmer.mididriver.MidiConstants;
 import org.billthefarmer.mididriver.MidiDriver;
 
@@ -40,39 +39,12 @@ import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-
-/**
- * An example full-screen activity that shows and hides the system UI (i.e.
- * status bar and navigation/system bar) with user interaction.
- */
-public class PlayActivity extends AppCompatActivity implements View.OnTouchListener, View.OnClickListener,
+public class PlayDayActivity extends AppCompatActivity  implements View.OnTouchListener, View.OnClickListener,
         MidiDriver.OnMidiStartListener {
+
     private static String TAG = "PlayActivity";
     private static final String DATE_FORMAT = "yyyy.MM.dd HH:mm:ss";
     public static final String SAMPLE_SESSION_NAME = "Afternoon run";
-
-
-    /**
-     * Whether or not the system UI should be auto-hidden after
-     * {@link #AUTO_HIDE_DELAY_MILLIS} milliseconds.
-     */
-    private static final boolean AUTO_HIDE = true;
-
-    /**
-     * If {@link #AUTO_HIDE} is set, the number of milliseconds to wait after
-     * user interaction before hiding the system UI.
-     */
-    private static final int AUTO_HIDE_DELAY_MILLIS = 3000;
-
-    /**
-     * Some older devices needs a small delay between UI widget updates
-     * and a change of the status and navigation bar.
-     */
-    private static final int UI_ANIMATION_DELAY = 300;
-
-    private View mContentView;
-    private View mControlsView;
-    private boolean mVisible;
 
     private static final int REQUEST_OAUTH = 1;
 
@@ -90,12 +62,20 @@ public class PlayActivity extends AppCompatActivity implements View.OnTouchListe
     protected MediaPlayer player;
 
     private Handler mHandler;
-    private static int DAY_DURATION_MS = 24 * 60 * 60 * 1000;
-    private static int DAY_PLAY_DURATION_MS = 120;
+    private static int MINS = 1;
+    private static int DAY_DURATION_MS = 24 * 60 * 60 * 1000; // 86400000
+    private static int PLAY_DURATION_MS = MINS * 60 * 1000; // 120000
+
+    private Button mPlayButton;
+    private TextView mActivityText;
+
+    long endTime;
+    long startTime;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_play_day);
 
         if (savedInstanceState != null) {
             authInProgress = savedInstanceState.getBoolean(AUTH_PENDING);
@@ -107,29 +87,17 @@ public class PlayActivity extends AppCompatActivity implements View.OnTouchListe
 
         mHandler = new Handler();
 
-        setContentView(R.layout.activity_play);
-
-        mVisible = true;
-        mControlsView = findViewById(R.id.fullscreen_content_controls);
-        mContentView = findViewById(R.id.fullscreen_content);
-
-
-        // Set up the user interaction to manually show or hide the system UI.
-        mContentView.setOnClickListener(new View.OnClickListener() {
+        mPlayButton = (Button) findViewById(R.id.play_button);
+        mPlayButton.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(View view) {
-                toggle();
+            public void onClick(View v) {
+                new InsertAndVerifyDataTask().execute();
             }
         });
 
-        // Upon interacting with UI controls, delay any scheduled hide()
-        // operations to prevent the jarring behavior of controls going away
-        // while interacting with the UI.
-        findViewById(R.id.dummy_button).setOnTouchListener(mDelayHideTouchListener);
-
+        mActivityText = (TextView) findViewById(R.id.play_activity);
 
         // Set on touch listener
-
         View v = findViewById(R.id.button1);
         if (v != null)
             v.setOnTouchListener(this);
@@ -149,112 +117,6 @@ public class PlayActivity extends AppCompatActivity implements View.OnTouchListe
         if (midi != null) {
             midi.setOnMidiStartListener(this);
         }
-    }
-
-    @Override
-    protected void onPostCreate(Bundle savedInstanceState) {
-        super.onPostCreate(savedInstanceState);
-
-        // Trigger the initial hide() shortly after the activity has been
-        // created, to briefly hint to the user that UI controls
-        // are available.
-        delayedHide(100);
-    }
-
-    /**
-     * Touch listener to use for in-layout UI controls to delay hiding the
-     * system UI. This is to prevent the jarring behavior of controls going away
-     * while interacting with activity UI.
-     */
-    private final View.OnTouchListener mDelayHideTouchListener = new View.OnTouchListener() {
-        @Override
-        public boolean onTouch(View view, MotionEvent motionEvent) {
-            if (AUTO_HIDE) {
-                delayedHide(AUTO_HIDE_DELAY_MILLIS);
-            }
-            return false;
-        }
-    };
-
-    private void toggle() {
-        if (mVisible) {
-            hide();
-        } else {
-            show();
-        }
-    }
-
-    private void hide() {
-        // Hide UI first
-        ActionBar actionBar = getSupportActionBar();
-        if (actionBar != null) {
-            actionBar.hide();
-        }
-        mControlsView.setVisibility(View.GONE);
-        mVisible = false;
-
-        // Schedule a runnable to remove the status and navigation bar after a delay
-        mHideHandler.removeCallbacks(mShowPart2Runnable);
-        mHideHandler.postDelayed(mHidePart2Runnable, UI_ANIMATION_DELAY);
-    }
-
-    private final Runnable mHidePart2Runnable = new Runnable() {
-        @SuppressLint("InlinedApi")
-        @Override
-        public void run() {
-            // Delayed removal of status and navigation bar
-
-            // Note that some of these constants are new as of API 16 (Jelly Bean)
-            // and API 19 (KitKat). It is safe to use them, as they are inlined
-            // at compile-time and do nothing on earlier devices.
-            mContentView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LOW_PROFILE
-                    | View.SYSTEM_UI_FLAG_FULLSCREEN
-                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION);
-        }
-    };
-
-    @SuppressLint("InlinedApi")
-    private void show() {
-        // Show the system bar
-        mContentView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
-        mVisible = true;
-
-        // Schedule a runnable to display UI elements after a delay
-        mHideHandler.removeCallbacks(mHidePart2Runnable);
-        mHideHandler.postDelayed(mShowPart2Runnable, UI_ANIMATION_DELAY);
-    }
-
-    private final Runnable mShowPart2Runnable = new Runnable() {
-        @Override
-        public void run() {
-            // Delayed display of UI elements
-            ActionBar actionBar = getSupportActionBar();
-            if (actionBar != null) {
-                actionBar.show();
-            }
-            mControlsView.setVisibility(View.VISIBLE);
-        }
-    };
-
-    private final Handler mHideHandler = new Handler();
-    private final Runnable mHideRunnable = new Runnable() {
-        @Override
-        public void run() {
-            hide();
-        }
-    };
-
-    /**
-     * Schedules a call to hide() in [delay] milliseconds, canceling any
-     * previously scheduled calls.
-     */
-    private void delayedHide(int delayMillis) {
-        mHideHandler.removeCallbacks(mHideRunnable);
-        mHideHandler.postDelayed(mHideRunnable, delayMillis);
     }
 
     /**
@@ -280,8 +142,7 @@ public class PlayActivity extends AppCompatActivity implements View.OnTouchListe
                                 Log.i(TAG, "Connected!!!");
                                 // Now you can make calls to the Fitness APIs.
                                 // Put application specific code here.
-                                new InsertAndVerifyDataTask().execute();
-
+                                mPlayButton.setClickable(true);
                             }
 
                             @Override
@@ -305,7 +166,7 @@ public class PlayActivity extends AppCompatActivity implements View.OnTouchListe
                                 if (!result.hasResolution()) {
                                     // Show the localized error dialog
                                     GooglePlayServicesUtil.getErrorDialog(result.getErrorCode(),
-                                            PlayActivity.this, 0).show();
+                                            PlayDayActivity.this, 0).show();
                                     return;
                                 }
                                 // The failure has a resolution. Resolve it.
@@ -315,7 +176,7 @@ public class PlayActivity extends AppCompatActivity implements View.OnTouchListe
                                     try {
                                         Log.i(TAG, "Attempting to resolve failed connection");
                                         authInProgress = true;
-                                        result.startResolutionForResult(PlayActivity.this,
+                                        result.startResolutionForResult(PlayDayActivity.this,
                                                 REQUEST_OAUTH);
                                     } catch (IntentSender.SendIntentException e) {
                                         Log.e(TAG,
@@ -378,30 +239,13 @@ public class PlayActivity extends AppCompatActivity implements View.OnTouchListe
             Calendar cal = Calendar.getInstance();
             Date now = new Date();
             cal.setTime(now);
-            long endTime = cal.getTimeInMillis();
+            endTime = cal.getTimeInMillis();
             cal.add(Calendar.DAY_OF_MONTH, -1);
-            long startTime = cal.getTimeInMillis();
-
-            SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
-            Log.i(TAG, "Range Start: " + dateFormat.format(startTime));
-            Log.i(TAG, "Range End: " + dateFormat.format(endTime));
+            startTime = cal.getTimeInMillis();
 
             // Begin by creating the query.
             //DataReadRequest readRequest = queryFitnessData();
-            DataReadRequest readRequest = new DataReadRequest.Builder()
-                    // The data request can specify multiple data types to return, effectively
-                    // combining multiple data queries into one call.
-                    // In this example, it's very unlikely that the request is for several hundred
-                    // datapoints each consisting of a few steps and a timestamp.  The more likely
-                    // scenario is wanting to see how many steps were walked per day, for 7 days.
-                    .aggregate(DataType.TYPE_STEP_COUNT_DELTA, DataType.AGGREGATE_STEP_COUNT_DELTA)
-                            .bucketByActivitySegment(5, TimeUnit.MINUTES)
-                            // Analogous to a "Group By" in SQL, defines how data should be aggregated.
-                            // bucketByTime allows for a time span, whereas bucketBySession would allow
-                            // bucketing by "sessions", which would need to be defined in code.
-                    //.bucketByTime(1, TimeUnit.MINUTES)
-                    .setTimeRange(startTime, endTime, TimeUnit.MILLISECONDS)
-                    .build();
+            DataReadRequest readRequest = queryFitnessDataForDay();
 
             // [START read_dataset]
             // Invoke the History API to fetch the data with the query and await the result of
@@ -413,7 +257,7 @@ public class PlayActivity extends AppCompatActivity implements View.OnTouchListe
             // For the sake of the sample, we'll print the data so we can see what we just added.
             // In general, logging fitness information should be avoided for privacy reasons.
             printData(dataReadResult);
-
+            playData(dataReadResult);
 
             /// Begin by creating the query.
             SessionReadRequest readRequestSession = readFitnessSession();
@@ -442,6 +286,32 @@ public class PlayActivity extends AppCompatActivity implements View.OnTouchListe
 
             return null;
         }
+    }
+
+    /**
+     * Return a {@link DataReadRequest} for all step count changes in the 24 hours.
+     */
+    private DataReadRequest queryFitnessDataForDay() {
+        // [START build_read_data_request]
+        // Setting a start and end date using a range of 24 hours before this moment.
+        Calendar cal = Calendar.getInstance();
+        Date now = new Date();
+        cal.setTime(now);
+        long endTime = cal.getTimeInMillis();
+        cal.add(Calendar.DAY_OF_MONTH, -1);
+        long startTime = cal.getTimeInMillis();
+
+        SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
+        Log.i(TAG, "Range Start: " + dateFormat.format(startTime) + " ms: " + startTime);
+        Log.i(TAG, "Range End: " + dateFormat.format(endTime) + " ms: " + endTime);
+
+        DataReadRequest readRequest = new DataReadRequest.Builder()
+                .aggregate(DataType.TYPE_STEP_COUNT_DELTA, DataType.AGGREGATE_STEP_COUNT_DELTA)
+                .bucketByActivitySegment(5, TimeUnit.MINUTES)
+                .setTimeRange(startTime, endTime, TimeUnit.MILLISECONDS)
+                .build();
+
+        return readRequest;
     }
 
     /**
@@ -507,7 +377,9 @@ public class PlayActivity extends AppCompatActivity implements View.OnTouchListe
                 dumpDataSet(dataSet);
             }
         }
-        // [END parse_read_data_result]
+    }
+
+    private void playData(DataReadResult dataReadResult) {
     }
 
     /**
@@ -537,17 +409,41 @@ public class PlayActivity extends AppCompatActivity implements View.OnTouchListe
 
     private void dumpDataSet(DataSet dataSet) {
         Log.i(TAG, "Data returned for Data type: " + dataSet.getDataType().getName());
-        for (DataPoint dp : dataSet.getDataPoints()) {
+        for (final DataPoint dp : dataSet.getDataPoints()) {
             SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
             Log.i(TAG, "Data point:");
             Log.i(TAG, "\tType: " + dp.getDataType().getName());
-            Log.i(TAG, "\tStart: " + dateFormat.format(dp.getStartTime(TimeUnit.MILLISECONDS)));
-            Log.i(TAG, "\tEnd: " + dateFormat.format(dp.getEndTime(TimeUnit.MILLISECONDS)));
-            for (Field field : dp.getDataType().getFields()) {
+            Log.i(TAG, "\tStart: " + dateFormat.format(dp.getStartTime(TimeUnit.MILLISECONDS)) + " ms: " + dp.getStartTime(TimeUnit.MILLISECONDS));
+            Log.i(TAG, "\tEnd: " + dateFormat.format(dp.getEndTime(TimeUnit.MILLISECONDS)) + " ms: " + dp.getEndTime(TimeUnit.MILLISECONDS));
+            for (final Field field : dp.getDataType().getFields()) {
                 Log.i(TAG, "\tField: " + field.getName() +
                         " Value: " + dp.getValue(field));
+
+                mHandler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        mActivityText.append("" + dp.getValue(field));
+
+                        sendMidi(MidiConstants.NOTE_ON, 48, 20);
+                        sendMidi(MidiConstants.NOTE_ON, 52, 20);
+                        sendMidi(MidiConstants.NOTE_ON, 55, 20);
+                        sendMidi(MidiConstants.NOTE_OFF, 48, 0);
+                        sendMidi(MidiConstants.NOTE_OFF, 52, 0);
+                        sendMidi(MidiConstants.NOTE_OFF, 55, 0);
+
+                    }
+                }, calculateDelay(dp.getStartTime(TimeUnit.MILLISECONDS)));
             }
+
+
         }
+    }
+
+    private long calculateDelay(long dpStartTime) {
+        float floating = (dpStartTime - startTime) / (float) DAY_DURATION_MS;
+        float result = floating * PLAY_DURATION_MS;
+        Log.i(TAG, "Delay:" + result/1000);
+        return (long) result;
     }
 
     private void dumpSession(Session session) {
@@ -672,9 +568,10 @@ public class PlayActivity extends AppCompatActivity implements View.OnTouchListe
 
     @Override
     public void onMidiStart() {
-        // Program change - harpsicord
+        // Program change
 
-        sendMidi(MidiConstants.PROGRAM_CHANGE, GeneralMidiConstants.HARPSICHORD);
+        sendMidi(MidiConstants.);
+        sendMidi(MidiConstants.PROGRAM_CHANGE, 127);
     }
 
     // Send a midi message
