@@ -28,8 +28,8 @@ import com.google.android.gms.fitness.data.Session;
 import com.google.android.gms.fitness.request.DataReadRequest;
 import com.google.android.gms.fitness.request.SessionReadRequest;
 import com.google.android.gms.fitness.result.DataReadResult;
-import com.google.android.gms.fitness.result.SessionReadResult;
 
+import org.billthefarmer.mididriver.GeneralMidiConstants;
 import org.billthefarmer.mididriver.MidiConstants;
 import org.billthefarmer.mididriver.MidiDriver;
 
@@ -39,7 +39,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-public class PlayDayActivity extends AppCompatActivity  implements View.OnTouchListener, View.OnClickListener,
+public class PlayDayActivity extends AppCompatActivity implements View.OnTouchListener, View.OnClickListener,
         MidiDriver.OnMidiStartListener {
 
     private static String TAG = "PlayActivity";
@@ -91,6 +91,7 @@ public class PlayDayActivity extends AppCompatActivity  implements View.OnTouchL
         mPlayButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                mPlayButton.setEnabled(false);
                 new InsertAndVerifyDataTask().execute();
             }
         });
@@ -257,9 +258,8 @@ public class PlayDayActivity extends AppCompatActivity  implements View.OnTouchL
             // For the sake of the sample, we'll print the data so we can see what we just added.
             // In general, logging fitness information should be avoided for privacy reasons.
             printData(dataReadResult);
-            playData(dataReadResult);
 
-            /// Begin by creating the query.
+            /*/// Begin by creating the query.
             SessionReadRequest readRequestSession = readFitnessSession();
 
             // [START read_session]
@@ -282,7 +282,7 @@ public class PlayDayActivity extends AppCompatActivity  implements View.OnTouchL
                     dumpDataSet(dataSet);
                 }
             }
-            // [END read_session]
+            // [END read_session]*/
 
             return null;
         }
@@ -307,6 +307,7 @@ public class PlayDayActivity extends AppCompatActivity  implements View.OnTouchL
 
         DataReadRequest readRequest = new DataReadRequest.Builder()
                 .aggregate(DataType.TYPE_STEP_COUNT_DELTA, DataType.AGGREGATE_STEP_COUNT_DELTA)
+                .aggregate(DataType.TYPE_DISTANCE_DELTA, DataType.AGGREGATE_DISTANCE_DELTA)
                 .bucketByActivitySegment(5, TimeUnit.MINUTES)
                 .setTimeRange(startTime, endTime, TimeUnit.MILLISECONDS)
                 .build();
@@ -358,6 +359,8 @@ public class PlayDayActivity extends AppCompatActivity  implements View.OnTouchL
      * directory to avoid exposing it to other applications.
      */
     private void printData(DataReadResult dataReadResult) {
+        startPlayer();
+
         // [START parse_read_data_result]
         // If the DataReadRequest object specified aggregated data, dataReadResult will be returned
         // as buckets containing DataSets, instead of just DataSets.
@@ -365,10 +368,12 @@ public class PlayDayActivity extends AppCompatActivity  implements View.OnTouchL
             Log.i(TAG, "Number of returned buckets of DataSets is: "
                     + dataReadResult.getBuckets().size());
             for (Bucket bucket : dataReadResult.getBuckets()) {
-                List<DataSet> dataSets = bucket.getDataSets();
+                /*List<DataSet> dataSets = bucket.getDataSets();
                 for (DataSet dataSet : dataSets) {
                     dumpDataSet(dataSet);
-                }
+                }*/
+
+                readBucket(bucket);
             }
         } else if (dataReadResult.getDataSets().size() > 0) {
             Log.i(TAG, "Number of returned DataSets is: "
@@ -379,7 +384,152 @@ public class PlayDayActivity extends AppCompatActivity  implements View.OnTouchL
         }
     }
 
-    private void playData(DataReadResult dataReadResult) {
+    private void readBucket(Bucket bucket) {
+        Log.i(TAG, "Reading bucket ");
+
+
+        SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
+
+        long startActSeg = bucket.getStartTime(TimeUnit.MILLISECONDS);
+        long endActSeg = bucket.getEndTime(TimeUnit.MILLISECONDS);
+
+        int steps = 0;
+        float distance = 0;
+
+        List<DataSet> dataSets = bucket.getDataSets();
+        for (DataSet dataSet : dataSets) {
+            Log.i(TAG, "Reading dataset ");
+
+            for (DataPoint dp : dataSet.getDataPoints()) {
+                Log.i(TAG, "\tType: " + dp.getDataType().getName());
+                for (final Field field : dp.getDataType().getFields()) {
+                    Log.i(TAG, "\tField: " + field.getName() +
+                            " Value: " + dp.getValue(field));
+
+                    if (field.equals(Field.FIELD_STEPS)) {
+                        steps += dp.getValue(field).asInt();
+                    } else if (field.equals(Field.FIELD_DISTANCE)) {
+                        distance += dp.getValue(field).asFloat();
+                    }
+                }
+            }
+        }
+
+        long duration = calculateDurationPlay(startActSeg, endActSeg);
+
+        if (steps > 20 && (steps/duration > 0.0001)) {
+            Log.i(TAG, "Bucket step " + steps + " dist " + distance + " duration " + (endActSeg - startActSeg) + " d play " + calculateDurationPlay(startActSeg, endActSeg));
+            playSteps(startActSeg, duration, steps, distance);
+        }
+    }
+
+    private long calculateDurationPlay(long start, long end) {
+
+
+
+        return (end - start) / (DAY_DURATION_MS / PLAY_DURATION_MS);
+
+    }
+
+    private void playSteps(long start, final long duration, final int steps, final float distance) {
+
+
+        mHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                mActivityText.append("\n" + steps + " steps" + distance + " dist");
+
+                for (int i = 0; i < duration; i = i + 20) {
+                    sendMidi(MidiConstants.NOTE_ON, 48, 63);
+                    sendMidi(MidiConstants.NOTE_ON, 52, 63);
+                    sendMidi(MidiConstants.NOTE_ON, 55, 63);
+                    sendMidi(MidiConstants.NOTE_OFF, 48, 0);
+                    sendMidi(MidiConstants.NOTE_OFF, 52, 0);
+                    sendMidi(MidiConstants.NOTE_OFF, 55, 0);
+
+                    try {
+                        Thread.sleep(20);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+            }
+        }, calculateDelay(start));
+    }
+
+
+
+    private void startPlayer() {
+        player = MediaPlayer.create(this, R.raw.heartbeat2);
+        player.setVolume(0.1f, 0.1f);
+        player.setLooping(true);
+        player.start();
+
+        mHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (player != null && player.isPlaying()) {
+                    player.pause();
+                    player.seekTo(0);
+                }
+
+                mPlayButton.setEnabled(true);
+            }
+        }, PLAY_DURATION_MS);
+    }
+
+    private void playTestSound() {
+        mHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                mActivityText.append("\n test");
+
+                switchToFootSteps();
+
+                sendMidi(MidiConstants.NOTE_ON, 48, 35);
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+                sendMidi(MidiConstants.NOTE_ON, 52, 35);
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+                sendMidi(MidiConstants.NOTE_ON, 55, 35);
+                /*try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+                sendMidi(MidiConstants.NOTE_OFF, 48, 0);
+                sendMidi(MidiConstants.NOTE_OFF, 52, 0);
+                sendMidi(MidiConstants.NOTE_OFF, 55, 0);
+
+               /* try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+                switchToSleep();
+
+                sendMidi(MidiConstants.NOTE_ON, 48, 35);
+                sendMidi(MidiConstants.NOTE_ON, 52, 35);
+                sendMidi(MidiConstants.NOTE_ON, 55, 35);
+                sendMidi(MidiConstants.NOTE_OFF, 48, 0);
+                sendMidi(MidiConstants.NOTE_OFF, 52, 0);
+                sendMidi(MidiConstants.NOTE_OFF, 55, 0);
+
+                switchToFootSteps();*/
+            }
+        }, 0);
     }
 
     /**
@@ -408,8 +558,9 @@ public class PlayDayActivity extends AppCompatActivity  implements View.OnTouchL
     }
 
     private void dumpDataSet(DataSet dataSet) {
+
         Log.i(TAG, "Data returned for Data type: " + dataSet.getDataType().getName());
-        for (final DataPoint dp : dataSet.getDataPoints()) {
+        for (DataPoint dp : dataSet.getDataPoints()) {
             SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
             Log.i(TAG, "Data point:");
             Log.i(TAG, "\tType: " + dp.getDataType().getName());
@@ -418,21 +569,6 @@ public class PlayDayActivity extends AppCompatActivity  implements View.OnTouchL
             for (final Field field : dp.getDataType().getFields()) {
                 Log.i(TAG, "\tField: " + field.getName() +
                         " Value: " + dp.getValue(field));
-
-                mHandler.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        mActivityText.append("" + dp.getValue(field));
-
-                        sendMidi(MidiConstants.NOTE_ON, 48, 20);
-                        sendMidi(MidiConstants.NOTE_ON, 52, 20);
-                        sendMidi(MidiConstants.NOTE_ON, 55, 20);
-                        sendMidi(MidiConstants.NOTE_OFF, 48, 0);
-                        sendMidi(MidiConstants.NOTE_OFF, 52, 0);
-                        sendMidi(MidiConstants.NOTE_OFF, 55, 0);
-
-                    }
-                }, calculateDelay(dp.getStartTime(TimeUnit.MILLISECONDS)));
             }
 
 
@@ -442,7 +578,7 @@ public class PlayDayActivity extends AppCompatActivity  implements View.OnTouchL
     private long calculateDelay(long dpStartTime) {
         float floating = (dpStartTime - startTime) / (float) DAY_DURATION_MS;
         float result = floating * PLAY_DURATION_MS;
-        Log.i(TAG, "Delay:" + result/1000);
+        Log.i(TAG, "Delay:" + result / 1000);
         return (long) result;
     }
 
@@ -548,12 +684,14 @@ public class PlayDayActivity extends AppCompatActivity  implements View.OnTouchL
 
         switch (id) {
             case R.id.button3:
-                if (player != null) {
+                /*if (player != null) {
                     player.stop();
                     player.release();
                 }
-                player = MediaPlayer.create(this, R.raw.ants);
-                player.start();
+                player.start();*/
+
+                playTestSound();
+
                 break;
 
             case R.id.button4:
@@ -569,9 +707,19 @@ public class PlayDayActivity extends AppCompatActivity  implements View.OnTouchL
     @Override
     public void onMidiStart() {
         // Program change
+        switchToFootSteps();
+    }
 
-        sendMidi(MidiConstants.);
-        sendMidi(MidiConstants.PROGRAM_CHANGE, 127);
+    public void switchToFootSteps() {
+        sendMidi(MidiConstants.PROGRAM_CHANGE, GeneralMidiConstants.SYNTH_DRUM);
+    }
+
+    public void switchToActive() {
+        sendMidi(MidiConstants.PROGRAM_CHANGE, GeneralMidiConstants.SYNTH_DRUM);
+    }
+
+    public void switchToSleep() {
+        sendMidi(MidiConstants.PROGRAM_CHANGE, GeneralMidiConstants.GUNSHOT);
     }
 
     // Send a midi message
