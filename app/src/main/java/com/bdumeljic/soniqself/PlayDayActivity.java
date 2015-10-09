@@ -5,7 +5,6 @@ import android.content.IntentSender;
 import android.media.MediaPlayer;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.Handler;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.MotionEvent;
@@ -61,7 +60,7 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
     protected MidiDriver midi;
     protected MediaPlayer player;
 
-    private Handler mHandler;
+    private PauseHandler mHandler;
     private static int MINS = 1;
     private static int DAY_DURATION_MS = 24 * 60 * 60 * 1000; // 86400000
     private static int PLAY_DURATION_MS = MINS * 60 * 1000; // 120000
@@ -85,14 +84,17 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
 
         midi = new MidiDriver();
 
-        mHandler = new Handler();
+        mHandler = new PauseHandler();
+        mHandler.pause();
 
         mPlayButton = (Button) findViewById(R.id.play_button);
         mPlayButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                mHandler.pause();
                 mPlayButton.setEnabled(false);
-                new InsertAndVerifyDataTask().execute();
+                setupIdlePlayer();
+                new RetrieveDayDataTask().execute();
             }
         });
 
@@ -234,7 +236,7 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
      * An example of an asynchronous call using a callback can be found in the example
      * on deleting data below.
      */
-    private class InsertAndVerifyDataTask extends AsyncTask<Void, Void, Void> {
+    private class RetrieveDayDataTask extends AsyncTask<Void, Void, Void> {
         protected Void doInBackground(Void... params) {
             // Set a start and end time for our query, using a start time of 1 week before this moment.
             Calendar cal = Calendar.getInstance();
@@ -244,45 +246,20 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
             cal.add(Calendar.DAY_OF_MONTH, -1);
             startTime = cal.getTimeInMillis();
 
-            // Begin by creating the query.
-            //DataReadRequest readRequest = queryFitnessData();
-            DataReadRequest readRequest = queryFitnessDataForDay();
+            SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
+            Log.i(TAG, "Range Start: " + dateFormat.format(startTime) + " ms: " + startTime);
+            Log.i(TAG, "Range End: " + dateFormat.format(endTime) + " ms: " + endTime);
 
-            // [START read_dataset]
-            // Invoke the History API to fetch the data with the query and await the result of
-            // the read request.
+            // Steps query
+            DataReadRequest readRequest = queryStepsDataForDay();
             DataReadResult dataReadResult =
                     Fitness.HistoryApi.readData(mClient, readRequest).await(1, TimeUnit.MINUTES);
-            // [END read_dataset]
-
-            // For the sake of the sample, we'll print the data so we can see what we just added.
-            // In general, logging fitness information should be avoided for privacy reasons.
             printData(dataReadResult);
 
-            /*/// Begin by creating the query.
-            SessionReadRequest readRequestSession = readFitnessSession();
+            //TODO Sleep query
 
-            // [START read_session]
-            // Invoke the Sessions API to fetch the session with the query and wait for the result
-            // of the read request.
-            SessionReadResult sessionReadResult =
-                    Fitness.SessionsApi.readSession(mClient, readRequestSession)
-                            .await(1, TimeUnit.MINUTES);
+            //TODO Activity query
 
-            // Get a list of the sessions that match the criteria to check the result.
-            Log.i(TAG, "Session read was successful. Number of returned sessions is: "
-                    + sessionReadResult.getSessions().size());
-            for (Session session : sessionReadResult.getSessions()) {
-                // Process the session
-                dumpSession(session);
-
-                // Process the data sets for this session
-                List<DataSet> dataSets = sessionReadResult.getDataSet(session);
-                for (DataSet dataSet : dataSets) {
-                    dumpDataSet(dataSet);
-                }
-            }
-            // [END read_session]*/
 
             return null;
         }
@@ -291,20 +268,7 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
     /**
      * Return a {@link DataReadRequest} for all step count changes in the 24 hours.
      */
-    private DataReadRequest queryFitnessDataForDay() {
-        // [START build_read_data_request]
-        // Setting a start and end date using a range of 24 hours before this moment.
-        Calendar cal = Calendar.getInstance();
-        Date now = new Date();
-        cal.setTime(now);
-        long endTime = cal.getTimeInMillis();
-        cal.add(Calendar.DAY_OF_MONTH, -1);
-        long startTime = cal.getTimeInMillis();
-
-        SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
-        Log.i(TAG, "Range Start: " + dateFormat.format(startTime) + " ms: " + startTime);
-        Log.i(TAG, "Range End: " + dateFormat.format(endTime) + " ms: " + endTime);
-
+    private DataReadRequest queryStepsDataForDay() {
         DataReadRequest readRequest = new DataReadRequest.Builder()
                 .aggregate(DataType.TYPE_STEP_COUNT_DELTA, DataType.AGGREGATE_STEP_COUNT_DELTA)
                 .aggregate(DataType.TYPE_DISTANCE_DELTA, DataType.AGGREGATE_DISTANCE_DELTA)
@@ -359,11 +323,6 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
      * directory to avoid exposing it to other applications.
      */
     private void printData(DataReadResult dataReadResult) {
-        startPlayer();
-
-        // [START parse_read_data_result]
-        // If the DataReadRequest object specified aggregated data, dataReadResult will be returned
-        // as buckets containing DataSets, instead of just DataSets.
         if (dataReadResult.getBuckets().size() > 0) {
             Log.i(TAG, "Number of returned buckets of DataSets is: "
                     + dataReadResult.getBuckets().size());
@@ -373,7 +332,7 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
                     dumpDataSet(dataSet);
                 }*/
 
-                readBucket(bucket);
+                readStepsBucket(bucket);
             }
         } else if (dataReadResult.getDataSets().size() > 0) {
             Log.i(TAG, "Number of returned DataSets is: "
@@ -384,11 +343,8 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
         }
     }
 
-    private void readBucket(Bucket bucket) {
+    private void readStepsBucket(Bucket bucket) {
         Log.i(TAG, "Reading bucket ");
-
-
-        SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
 
         long startActSeg = bucket.getStartTime(TimeUnit.MILLISECONDS);
         long endActSeg = bucket.getEndTime(TimeUnit.MILLISECONDS);
@@ -424,17 +380,11 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
     }
 
     private long calculateDurationPlay(long start, long end) {
-
-
-
         return (end - start) / (DAY_DURATION_MS / PLAY_DURATION_MS);
-
     }
 
     private void playSteps(long start, final long duration, final int steps, final float distance) {
-
-
-        mHandler.postDelayed(new Runnable() {
+        mHandler.postPausedDelayed(new Runnable() {
             @Override
             public void run() {
                 mActivityText.append("\n" + steps + " steps" + distance + " dist");
@@ -458,15 +408,18 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
         }, calculateDelay(start));
     }
 
+    private void setupIdlePlayer() {
+        mHandler.postPausedDelayed(new Runnable() {
+            @Override
+            public void run() {
+                player = MediaPlayer.create(PlayDayActivity.this, R.raw.heartbeat2);
+                player.setVolume(0.1f, 0.1f);
+                player.setLooping(true);
+                player.start();
+            }
+        }, 1);
 
-
-    private void startPlayer() {
-        player = MediaPlayer.create(this, R.raw.heartbeat2);
-        player.setVolume(0.1f, 0.1f);
-        player.setLooping(true);
-        player.start();
-
-        mHandler.postDelayed(new Runnable() {
+        mHandler.postPausedDelayed(new Runnable() {
             @Override
             public void run() {
                 if (player != null && player.isPlaying()) {
@@ -480,7 +433,7 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
     }
 
     private void playTestSound() {
-        mHandler.postDelayed(new Runnable() {
+        mHandler.postPausedDelayed(new Runnable() {
             @Override
             public void run() {
                 mActivityText.append("\n test");
@@ -590,8 +543,6 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
                 + "\n\tEnd: " + dateFormat.format(session.getEndTime(TimeUnit.MILLISECONDS)));
     }
 
-    // On resume
-
     @Override
     protected void onResume() {
         super.onResume();
@@ -601,8 +552,6 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
         if (midi != null)
             midi.start();
     }
-
-    // On pause
 
     @Override
     protected void onPause() {
@@ -618,8 +567,6 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
         if (player != null)
             player.stop();
     }
-
-    // On touch
 
     @Override
     public boolean onTouch(View v, MotionEvent event) {
@@ -690,7 +637,9 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
                 }
                 player.start();*/
 
-                playTestSound();
+                //playTestSound();
+
+                mHandler.resume();
 
                 break;
 
