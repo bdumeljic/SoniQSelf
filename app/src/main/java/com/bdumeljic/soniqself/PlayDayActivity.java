@@ -18,6 +18,7 @@ import com.google.android.gms.common.Scopes;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.Scope;
 import com.google.android.gms.fitness.Fitness;
+import com.google.android.gms.fitness.FitnessActivities;
 import com.google.android.gms.fitness.data.Bucket;
 import com.google.android.gms.fitness.data.DataPoint;
 import com.google.android.gms.fitness.data.DataSet;
@@ -25,7 +26,6 @@ import com.google.android.gms.fitness.data.DataType;
 import com.google.android.gms.fitness.data.Field;
 import com.google.android.gms.fitness.data.Session;
 import com.google.android.gms.fitness.request.DataReadRequest;
-import com.google.android.gms.fitness.request.SessionReadRequest;
 import com.google.android.gms.fitness.result.DataReadResult;
 
 import org.billthefarmer.mididriver.GeneralMidiConstants;
@@ -251,19 +251,21 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
             Log.i(TAG, "Range End: " + dateFormat.format(endTime) + " ms: " + endTime);
 
             // Steps query
-            DataReadRequest readRequest = queryStepsDataForDay();
-            DataReadResult dataReadResult =
-                    Fitness.HistoryApi.readData(mClient, readRequest).await(1, TimeUnit.MINUTES);
-            printData(dataReadResult);
+            //DataReadRequest stepsReadRequest = queryStepsDataForDay();
+            //DataReadResult stepsDataReadResult = Fitness.HistoryApi.readData(mClient, stepsReadRequest).await(1, TimeUnit.MINUTES);
+            //stepsPrintData(stepsDataReadResult);
 
-            //TODO Sleep query
+            //TODO  query
+            DataReadRequest dayDataReadRequest = queryDataForDay();
+            DataReadResult dayDataReadResult = Fitness.HistoryApi.readData(mClient, dayDataReadRequest).await(1, TimeUnit.MINUTES);
+            handleActivitySegment(dayDataReadResult);
 
-            //TODO Activity query
-
+            mHandler.resume();
 
             return null;
         }
     }
+
 
     /**
      * Return a {@link DataReadRequest} for all step count changes in the 24 hours.
@@ -279,60 +281,31 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
         return readRequest;
     }
 
-    /**
-     * Return a {@link DataReadRequest} for all step count changes in the past week.
-     */
-    private DataReadRequest queryFitnessData() {
-        // [START build_read_data_request]
-        // Setting a start and end date using a range of 1 week before this moment.
-        Calendar cal = Calendar.getInstance();
-        Date now = new Date();
-        cal.setTime(now);
-        long endTime = cal.getTimeInMillis();
-        cal.add(Calendar.WEEK_OF_YEAR, -1);
-        long startTime = cal.getTimeInMillis();
-
-        SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
-        Log.i(TAG, "Range Start: " + dateFormat.format(startTime));
-        Log.i(TAG, "Range End: " + dateFormat.format(endTime));
-
+    private DataReadRequest queryDataForDay() {
         DataReadRequest readRequest = new DataReadRequest.Builder()
-                // The data request can specify multiple data types to return, effectively
-                // combining multiple data queries into one call.
-                // In this example, it's very unlikely that the request is for several hundred
-                // datapoints each consisting of a few steps and a timestamp.  The more likely
-                // scenario is wanting to see how many steps were walked per day, for 7 days.
                 .aggregate(DataType.TYPE_STEP_COUNT_DELTA, DataType.AGGREGATE_STEP_COUNT_DELTA)
-                        // Analogous to a "Group By" in SQL, defines how data should be aggregated.
-                        // bucketByTime allows for a time span, whereas bucketBySession would allow
-                        // bucketing by "sessions", which would need to be defined in code.
-                .bucketByTime(1, TimeUnit.DAYS)
+                .aggregate(DataType.TYPE_ACTIVITY_SEGMENT, DataType.AGGREGATE_ACTIVITY_SUMMARY)
+                .aggregate(DataType.TYPE_CALORIES_EXPENDED, DataType.AGGREGATE_CALORIES_EXPENDED)
+                .aggregate(DataType.TYPE_DISTANCE_DELTA, DataType.AGGREGATE_DISTANCE_DELTA)
+                .aggregate(DataType.TYPE_SPEED, DataType.AGGREGATE_SPEED_SUMMARY)
+                .bucketByActivitySegment(3, TimeUnit.MINUTES)
                 .setTimeRange(startTime, endTime, TimeUnit.MILLISECONDS)
                 .build();
-        // [END build_read_data_request]
 
         return readRequest;
     }
 
-    /**
-     * Log a record of the query result. It's possible to get more constrained data sets by
-     * specifying a data source or data type, but for demonstrative purposes here's how one would
-     * dump all the data. In this sample, logging also prints to the device screen, so we can see
-     * what the query returns, but your app should not log fitness information as a privacy
-     * consideration. A better option would be to dump the data you receive to a local data
-     * directory to avoid exposing it to other applications.
-     */
     private void printData(DataReadResult dataReadResult) {
         if (dataReadResult.getBuckets().size() > 0) {
             Log.i(TAG, "Number of returned buckets of DataSets is: "
                     + dataReadResult.getBuckets().size());
             for (Bucket bucket : dataReadResult.getBuckets()) {
-                /*List<DataSet> dataSets = bucket.getDataSets();
+                Log.i(TAG, "Bucket: " + bucket.getActivity());
+
+                List<DataSet> dataSets = bucket.getDataSets();
                 for (DataSet dataSet : dataSets) {
                     dumpDataSet(dataSet);
-                }*/
-
-                readStepsBucket(bucket);
+                }
             }
         } else if (dataReadResult.getDataSets().size() > 0) {
             Log.i(TAG, "Number of returned DataSets is: "
@@ -343,8 +316,65 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
         }
     }
 
+    private void handleActivitySegment(DataReadResult dataReadResult) {
+        if (dataReadResult.getBuckets().size() > 0) {
+            Log.i(TAG, "Number of returned buckets of DataSets is: "
+                    + dataReadResult.getBuckets().size());
+            for (Bucket bucket : dataReadResult.getBuckets()) {
+                Log.i(TAG, "Bucket: " + bucket.getActivity());
+
+                switch (bucket.getActivity()) {
+                    case FitnessActivities.STILL:
+                    case FitnessActivities.UNKNOWN:
+                    case FitnessActivities.TILTING:
+                    case FitnessActivities.ON_FOOT:
+                    case FitnessActivities.IN_VEHICLE:
+                        Log.i(TAG, "Ignore");
+                        break;
+                    case FitnessActivities.WALKING:
+                        Log.i(TAG, "Walking");
+
+                        readStepsBucket(bucket);
+
+                        break;
+                    case FitnessActivities.SLEEP:
+                    case FitnessActivities.SLEEP_LIGHT:
+                    case FitnessActivities.SLEEP_DEEP:
+                    case FitnessActivities.SLEEP_REM:
+                        Log.i(TAG, "Sleeping");
+
+                        readSleepBucket(bucket);
+
+                        break;
+                    default:
+                        Log.i(TAG, "Activity");
+
+                        List<DataSet> dataSets = bucket.getDataSets();
+                        for (DataSet dataSet : dataSets) {
+                            dumpDataSet(dataSet);
+                        }
+
+                        readActBucket(bucket);
+
+                        break;
+                }
+            }
+        }
+    }
+
+    private void stepsPrintData(DataReadResult dataReadResult) {
+        if (dataReadResult.getBuckets().size() > 0) {
+            Log.i(TAG, "Number of returned buckets of DataSets is: "
+                    + dataReadResult.getBuckets().size());
+            for (Bucket bucket : dataReadResult.getBuckets()) {
+
+                readStepsBucket(bucket);
+            }
+        }
+    }
+
     private void readStepsBucket(Bucket bucket) {
-        Log.i(TAG, "Reading bucket ");
+        Log.i(TAG, "Reading steps bucket ");
 
         long startActSeg = bucket.getStartTime(TimeUnit.MILLISECONDS);
         long endActSeg = bucket.getEndTime(TimeUnit.MILLISECONDS);
@@ -373,14 +403,94 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
 
         long duration = calculateDurationPlay(startActSeg, endActSeg);
 
-        if (steps > 20 && (steps/duration > 0.0001)) {
+        if (steps > 20 && (steps / duration > 0.0001)) {
             Log.i(TAG, "Bucket step " + steps + " dist " + distance + " duration " + (endActSeg - startActSeg) + " d play " + calculateDurationPlay(startActSeg, endActSeg));
             playSteps(startActSeg, duration, steps, distance);
         }
     }
 
+    private void readSleepBucket(Bucket bucket) {
+        Log.i(TAG, "Reading sleep bucket ");
+
+        long startActSeg = bucket.getStartTime(TimeUnit.MILLISECONDS);
+        long endActSeg = bucket.getEndTime(TimeUnit.MILLISECONDS);
+
+        long duration = calculateDurationPlay(startActSeg, endActSeg);
+        int type = 0;
+
+        playSleep(startActSeg, duration, type);
+    }
+
+    private void readActBucket(Bucket bucket) {
+        Log.i(TAG, "Reading sleep bucket ");
+
+        long startActSeg = bucket.getStartTime(TimeUnit.MILLISECONDS);
+        long endActSeg = bucket.getEndTime(TimeUnit.MILLISECONDS);
+
+        long duration = calculateDurationPlay(startActSeg, endActSeg);
+        int type = 0;
+
+        playAct(startActSeg, duration, type);
+    }
+
     private long calculateDurationPlay(long start, long end) {
         return (end - start) / (DAY_DURATION_MS / PLAY_DURATION_MS);
+    }
+
+    private void playSleep(long start, final long duration, int type) {
+        mHandler.postPausedDelayed(new Runnable() {
+            @Override
+            public void run() {
+                switchToSleep();
+                mActivityText.append("\n" + "sleep");
+
+                for (int i = 0; i < duration; i = i + 20) {
+                    sendMidi(MidiConstants.NOTE_ON, 48, 63);
+                    sendMidi(MidiConstants.NOTE_ON, 52, 63);
+                    sendMidi(MidiConstants.NOTE_ON, 55, 63);
+                    sendMidi(MidiConstants.NOTE_OFF, 48, 0);
+                    sendMidi(MidiConstants.NOTE_OFF, 52, 0);
+                    sendMidi(MidiConstants.NOTE_OFF, 55, 0);
+
+                    try {
+                        Thread.sleep(20);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                switchToFootSteps();
+
+            }
+        }, calculateDelay(start));
+    }
+
+    private void playAct(long start, final long duration, int type) {
+        mHandler.postPausedDelayed(new Runnable() {
+            @Override
+            public void run() {
+                switchToActive();
+                mActivityText.append("\n" + "activity");
+
+                for (int i = 0; i < duration; i = i + 20) {
+                    sendMidi(MidiConstants.NOTE_ON, 48, 63);
+                    sendMidi(MidiConstants.NOTE_ON, 52, 63);
+                    sendMidi(MidiConstants.NOTE_ON, 55, 63);
+                    sendMidi(MidiConstants.NOTE_OFF, 48, 0);
+                    sendMidi(MidiConstants.NOTE_OFF, 52, 0);
+                    sendMidi(MidiConstants.NOTE_OFF, 55, 0);
+
+                    try {
+                        Thread.sleep(20);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                switchToFootSteps();
+
+            }
+        }, calculateDelay(start));
     }
 
     private void playSteps(long start, final long duration, final int steps, final float distance) {
@@ -485,31 +595,6 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
         }, 0);
     }
 
-    /**
-     * Return a {@link SessionReadRequest} for all speed data in the past week.
-     */
-    private SessionReadRequest readFitnessSession() {
-        Log.i(TAG, "Reading History API results for session: " + SAMPLE_SESSION_NAME);
-        // [START build_read_session_request]
-        // Set a start and end time for our query, using a start time of 1 week before this moment.
-        Calendar cal = Calendar.getInstance();
-        Date now = new Date();
-        cal.setTime(now);
-        long endTime = cal.getTimeInMillis();
-        cal.add(Calendar.WEEK_OF_YEAR, -1);
-        long startTime = cal.getTimeInMillis();
-
-        // Build a session read request
-        SessionReadRequest readRequest = new SessionReadRequest.Builder()
-                .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
-                .read(DataType.TYPE_SPEED)
-                .setSessionName(SAMPLE_SESSION_NAME)
-                .build();
-        // [END build_read_session_request]
-
-        return readRequest;
-    }
-
     private void dumpDataSet(DataSet dataSet) {
 
         Log.i(TAG, "Data returned for Data type: " + dataSet.getDataType().getName());
@@ -520,8 +605,7 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
             Log.i(TAG, "\tStart: " + dateFormat.format(dp.getStartTime(TimeUnit.MILLISECONDS)) + " ms: " + dp.getStartTime(TimeUnit.MILLISECONDS));
             Log.i(TAG, "\tEnd: " + dateFormat.format(dp.getEndTime(TimeUnit.MILLISECONDS)) + " ms: " + dp.getEndTime(TimeUnit.MILLISECONDS));
             for (final Field field : dp.getDataType().getFields()) {
-                Log.i(TAG, "\tField: " + field.getName() +
-                        " Value: " + dp.getValue(field));
+                Log.i(TAG, "\tField: " + field.getName() + " Value: " + dp.getValue(field));
             }
 
 
@@ -664,7 +748,7 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
     }
 
     public void switchToActive() {
-        sendMidi(MidiConstants.PROGRAM_CHANGE, GeneralMidiConstants.SYNTH_DRUM);
+        sendMidi(MidiConstants.PROGRAM_CHANGE, GeneralMidiConstants.ACOUSTIC_GRAND_PIANO);
     }
 
     public void switchToSleep() {
