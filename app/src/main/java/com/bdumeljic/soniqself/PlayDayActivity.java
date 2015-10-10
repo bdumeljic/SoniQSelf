@@ -5,11 +5,12 @@ import android.content.IntentSender;
 import android.media.MediaPlayer;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.CountDownTimer;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
-import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -24,7 +25,6 @@ import com.google.android.gms.fitness.data.DataPoint;
 import com.google.android.gms.fitness.data.DataSet;
 import com.google.android.gms.fitness.data.DataType;
 import com.google.android.gms.fitness.data.Field;
-import com.google.android.gms.fitness.data.Session;
 import com.google.android.gms.fitness.request.DataReadRequest;
 import com.google.android.gms.fitness.result.DataReadResult;
 
@@ -38,8 +38,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-public class PlayDayActivity extends AppCompatActivity implements View.OnTouchListener, View.OnClickListener,
-        MidiDriver.OnMidiStartListener {
+public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnMidiStartListener {
 
     private static String TAG = "PlayActivity";
     private static final String DATE_FORMAT = "yyyy.MM.dd HH:mm:ss";
@@ -71,9 +70,12 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
     long endTime;
     long startTime;
 
+    private ProgressBar mProgress;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
         setContentView(R.layout.activity_play_day);
 
         if (savedInstanceState != null) {
@@ -87,35 +89,21 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
         mHandler = new PauseHandler();
         mHandler.pause();
 
+        mProgress = (ProgressBar) findViewById(R.id.progressBar);
+
         mPlayButton = (Button) findViewById(R.id.play_button);
         mPlayButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 mHandler.pause();
                 mPlayButton.setEnabled(false);
-                setupIdlePlayer();
                 new RetrieveDayDataTask().execute();
+                setupIdlePlayer();
+                startProgressBar();
             }
         });
 
         mActivityText = (TextView) findViewById(R.id.play_activity);
-
-        // Set on touch listener
-        View v = findViewById(R.id.button1);
-        if (v != null)
-            v.setOnTouchListener(this);
-
-        v = findViewById(R.id.button2);
-        if (v != null)
-            v.setOnTouchListener(this);
-
-        v = findViewById(R.id.button3);
-        if (v != null)
-            v.setOnClickListener(this);
-
-        v = findViewById(R.id.button4);
-        if (v != null)
-            v.setOnClickListener(this);
 
         if (midi != null) {
             midi.setOnMidiStartListener(this);
@@ -250,22 +238,30 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
             Log.i(TAG, "Range Start: " + dateFormat.format(startTime) + " ms: " + startTime);
             Log.i(TAG, "Range End: " + dateFormat.format(endTime) + " ms: " + endTime);
 
-            // Steps query
-            //DataReadRequest stepsReadRequest = queryStepsDataForDay();
-            //DataReadResult stepsDataReadResult = Fitness.HistoryApi.readData(mClient, stepsReadRequest).await(1, TimeUnit.MINUTES);
-            //stepsPrintData(stepsDataReadResult);
-
-            //TODO  query
             DataReadRequest dayDataReadRequest = queryDataForDay();
             DataReadResult dayDataReadResult = Fitness.HistoryApi.readData(mClient, dayDataReadRequest).await(1, TimeUnit.MINUTES);
             handleActivitySegment(dayDataReadResult);
 
             mHandler.resume();
-
             return null;
         }
     }
 
+    private void startProgressBar() {
+        mProgress.setVisibility(View.VISIBLE);
+        mProgress.setMax(100);
+
+        new CountDownTimer(PLAY_DURATION_MS, 1000) {
+            public void onTick(long millisUntilFinished) {
+                float progress = (PLAY_DURATION_MS - millisUntilFinished) / (float) PLAY_DURATION_MS * 100f;
+                mProgress.setProgress((int) progress);
+            }
+
+            public void onFinish() {
+                mProgress.setVisibility(View.INVISIBLE);
+            }
+        }.start();
+    }
 
     /**
      * Return a {@link DataReadRequest} for all step count changes in the 24 hours.
@@ -293,27 +289,6 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
                 .build();
 
         return readRequest;
-    }
-
-    private void printData(DataReadResult dataReadResult) {
-        if (dataReadResult.getBuckets().size() > 0) {
-            Log.i(TAG, "Number of returned buckets of DataSets is: "
-                    + dataReadResult.getBuckets().size());
-            for (Bucket bucket : dataReadResult.getBuckets()) {
-                Log.i(TAG, "Bucket: " + bucket.getActivity());
-
-                List<DataSet> dataSets = bucket.getDataSets();
-                for (DataSet dataSet : dataSets) {
-                    dumpDataSet(dataSet);
-                }
-            }
-        } else if (dataReadResult.getDataSets().size() > 0) {
-            Log.i(TAG, "Number of returned DataSets is: "
-                    + dataReadResult.getDataSets().size());
-            for (DataSet dataSet : dataReadResult.getDataSets()) {
-                dumpDataSet(dataSet);
-            }
-        }
     }
 
     private void handleActivitySegment(DataReadResult dataReadResult) {
@@ -358,17 +333,6 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
 
                         break;
                 }
-            }
-        }
-    }
-
-    private void stepsPrintData(DataReadResult dataReadResult) {
-        if (dataReadResult.getBuckets().size() > 0) {
-            Log.i(TAG, "Number of returned buckets of DataSets is: "
-                    + dataReadResult.getBuckets().size());
-            for (Bucket bucket : dataReadResult.getBuckets()) {
-
-                readStepsBucket(bucket);
             }
         }
     }
@@ -442,7 +406,7 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
             @Override
             public void run() {
                 switchToSleep();
-                mActivityText.append("\n" + "sleep");
+                mActivityText.append("\n" + "Sleeping");
 
                 for (int i = 0; i < duration; i = i + 20) {
                     sendMidi(MidiConstants.NOTE_ON, 48, 63);
@@ -470,7 +434,7 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
             @Override
             public void run() {
                 switchToActive();
-                mActivityText.append("\n" + "activity");
+                mActivityText.append("\n" + "An Activity");
 
                 for (int i = 0; i < duration; i = i + 20) {
                     sendMidi(MidiConstants.NOTE_ON, 48, 63);
@@ -497,7 +461,7 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
         mHandler.postPausedDelayed(new Runnable() {
             @Override
             public void run() {
-                mActivityText.append("\n" + steps + " steps" + distance + " dist");
+                mActivityText.append("\n Walking (" + steps + " steps)");
 
                 for (int i = 0; i < duration; i = i + 20) {
                     sendMidi(MidiConstants.NOTE_ON, 48, 63);
@@ -523,7 +487,7 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
             @Override
             public void run() {
                 player = MediaPlayer.create(PlayDayActivity.this, R.raw.heartbeat2);
-                player.setVolume(0.1f, 0.1f);
+                player.setVolume(0.2f, 0.2f);
                 player.setLooping(true);
                 player.start();
             }
@@ -619,14 +583,6 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
         return (long) result;
     }
 
-    private void dumpSession(Session session) {
-        SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
-        Log.i(TAG, "Data returned for Session: " + session.getName()
-                + "\n\tDescription: " + session.getDescription()
-                + "\n\tStart: " + dateFormat.format(session.getStartTime(TimeUnit.MILLISECONDS))
-                + "\n\tEnd: " + dateFormat.format(session.getEndTime(TimeUnit.MILLISECONDS)));
-    }
-
     @Override
     protected void onResume() {
         super.onResume();
@@ -650,88 +606,6 @@ public class PlayDayActivity extends AppCompatActivity implements View.OnTouchLi
 
         if (player != null)
             player.stop();
-    }
-
-    @Override
-    public boolean onTouch(View v, MotionEvent event) {
-        int action = event.getAction();
-        int id = v.getId();
-
-        switch (action) {
-            // Down
-
-            case MotionEvent.ACTION_DOWN:
-                switch (id) {
-                    case R.id.button1:
-                        sendMidi(MidiConstants.NOTE_ON, 48, 63);
-                        sendMidi(MidiConstants.NOTE_ON, 52, 63);
-                        sendMidi(MidiConstants.NOTE_ON, 55, 63);
-                        break;
-
-                    case R.id.button2:
-                        sendMidi(MidiConstants.NOTE_ON, 55, 63);
-                        sendMidi(MidiConstants.NOTE_ON, 59, 63);
-                        sendMidi(MidiConstants.NOTE_ON, 62, 63);
-                        break;
-
-                    default:
-                        return false;
-                }
-                break;
-
-            // Up
-
-            case MotionEvent.ACTION_UP:
-                switch (id) {
-                    case R.id.button1:
-                        sendMidi(MidiConstants.NOTE_OFF, 48, 0);
-                        sendMidi(MidiConstants.NOTE_OFF, 52, 0);
-                        sendMidi(MidiConstants.NOTE_OFF, 55, 0);
-                        break;
-
-                    case R.id.button2:
-                        sendMidi(MidiConstants.NOTE_OFF, 55, 0);
-                        sendMidi(MidiConstants.NOTE_OFF, 59, 0);
-                        sendMidi(MidiConstants.NOTE_OFF, 62, 0);
-                        break;
-
-                    default:
-                        return false;
-                }
-                break;
-
-            default:
-                return false;
-        }
-
-        return false;
-    }
-
-    // On click
-
-    @Override
-    public void onClick(View v) {
-        int id = v.getId();
-
-        switch (id) {
-            case R.id.button3:
-                /*if (player != null) {
-                    player.stop();
-                    player.release();
-                }
-                player.start();*/
-
-                //playTestSound();
-
-                mHandler.resume();
-
-                break;
-
-            case R.id.button4:
-                if (player != null)
-                    player.stop();
-                break;
-        }
     }
 
     // Listener for sending initial midi messages when the Sonivox

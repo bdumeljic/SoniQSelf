@@ -5,95 +5,60 @@
     android:layout_height="match_parent"
     android:background="#0099cc"
     android:theme="@style/SoniQTheme"
-    tools:context="com.bdumeljic.soniqself.PlayDayActivity">
+    tools:context=".PlayDayActivity">
 
-    <!-- The primary full-screen view. This can be replaced with whatever view
-         is needed to present your content, e.g. VideoView, SurfaceView,
-         TextureView, etc. -->
-    <TextView
-        android:id="@+id/fullscreen_content"
+    <ImageView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:gravity="center"
-        android:keepScreenOn="true"
-        android:text="@string/app_name"
-        android:textColor="#33b5e5"
-        android:textSize="50sp"
-        android:textStyle="bold" />
+        android:id="@+id/imageView"
+        android:src="@drawable/background2"
+        android:scaleType="centerCrop" />
 
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="vertical">
+    <RelativeLayout
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:background="@color/black_overlay"
+        android:layout_gravity="center">
 
-        <!---<Button
-            android:id="@+id/button1"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignParentLeft="true"
-            android:layout_below="@+id/textView1"
-            android:text="C" />
 
         <Button
-            android:id="@+id/button2"
+            android:id="@+id/play_button"
+            style="?metaButtonBarButtonStyle"
             android:layout_width="wrap_content"
+            android:clickable="false"
             android:layout_height="wrap_content"
-            android:layout_alignTop="@+id/button1"
-            android:layout_toRightOf="@+id/button1"
-            android:text="G" />
-
-        <Button
-            android:id="@+id/button3"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignLeft="@+id/button1"
-            android:layout_below="@+id/button1"
-            android:layout_marginTop="8dp"
-            android:text="Ants" />
-
-        <Button
-            android:id="@+id/button4"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignBaseline="@+id/button3"
-            android:layout_alignBottom="@+id/button3"
-            android:layout_toRightOf="@+id/button3"
-            android:text="!Ants" />-->
+            android:text="@string/play_button"
+            android:layout_centerInParent="true"
+            android:textAppearance="@style/Base.TextAppearance.AppCompat.Headline"
+            android:textStyle="bold"
+            android:paddingLeft="64dp"
+            android:paddingTop="64dp"
+            android:paddingRight="64dp"
+            android:paddingBottom="16dp" />
 
         <TextView
             android:id="@+id/play_activity"
             android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/placeholder"/>
-    </LinearLayout>
+            android:layout_height="fill_parent"
+            android:text="@string/placeholder"
+            android:layout_below="@+id/progressBar"
+            android:layout_centerHorizontal="true"
+            android:textAlignment="center"
+            android:textAppearance="@style/Base.TextAppearance.AppCompat.Body1"
+            android:padding="16dp" />
 
-    <!-- This FrameLayout insets its children based on system windows using
-         android:fitsSystemWindows. -->
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fitsSystemWindows="true">
-
-        <LinearLayout
-            android:id="@+id/fullscreen_content_controls"
-            style="?metaButtonBarStyle"
+        <ProgressBar
+            style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="bottom|center_horizontal"
-            android:background="@color/black_overlay"
-            android:orientation="horizontal"
-            tools:ignore="UselessParent">
+            android:id="@+id/progressBar"
+            android:layout_below="@+id/play_button"
+            android:layout_centerHorizontal="true"
+            android:layout_margin="8dp"
+            android:layout_marginLeft="32dp"
+            android:layout_marginRight="32dp"
+            android:visibility="invisible" />
 
-            <Button
-                android:id="@+id/play_button"
-                style="?metaButtonBarButtonStyle"
-                android:layout_width="0dp"
-                android:clickable="false"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/play_button" />
-
-        </LinearLayout>
-    </FrameLayout>
+    </RelativeLayout>
 
 </FrameLayout>
