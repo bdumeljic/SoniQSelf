@@ -36,6 +36,7 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnMidiStartListener {
@@ -408,27 +409,57 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
         playAct(startActSeg, duration, bucket.getActivity(), steps, distance, speed, calories);
     }
 
-    private void playSleep(long start, final long duration, int type) {
+    private void playSleep(long start, final long duration, final int type) {
         mHandler.postPausedDelayed(new Runnable() {
             @Override
             public void run() {
                 switchToSleep();
                 mActivityText.append("\n" + "Sleeping");
 
-                for (int i = 0; i < duration; i = i + 80) {
-                    sendMidi(MidiConstants.NOTE_ON, 48, 63);
-                    sendMidi(MidiConstants.NOTE_ON, 52, 63);
-                    sendMidi(MidiConstants.NOTE_ON, 55, 63);
+                int note = 48;
+                int velocity = 50;
+
+                int min = 0;
+                int max = 120;
+
+                // Map type of sleep to pitch range
+                // 0: Default, 1: Light, 2: Deep, 3: REM
+                switch (type) {
+                    case 1:
+                        min = 20;
+                        max = 120;
+                        mActivityText.append(" (Light)");
+                        break;
+                    case 2:
+                        min = 0;
+                        max = 39;
+                        mActivityText.append(" (Deep)");
+                        break;
+                    case 3:
+                        min = 40;
+                        max = 79;
+                        mActivityText.append(" (REM)");
+                        break;
+                }
+
+                Random random = new Random();
+
+                for (int i = 0; i < duration; i = i + 100) {
+                    note = random.nextInt(max - min + 1) + min;
+
+                    sendMidi(MidiConstants.NOTE_ON, note, velocity);
+                    sendMidi(MidiConstants.NOTE_ON, note + 4, velocity);
+                    sendMidi(MidiConstants.NOTE_ON, note + 7, velocity);
 
                     try {
-                        Thread.sleep(30);
+                        Thread.sleep(50);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
 
-                    sendMidi(MidiConstants.NOTE_OFF, 48, 0);
-                    sendMidi(MidiConstants.NOTE_OFF, 52, 0);
-                    sendMidi(MidiConstants.NOTE_OFF, 55, 0);
+                    sendMidi(MidiConstants.NOTE_OFF, note, 0);
+                    sendMidi(MidiConstants.NOTE_OFF, note + 4, 0);
+                    sendMidi(MidiConstants.NOTE_OFF, note + 7, 0);
 
                     try {
                         Thread.sleep(50);
@@ -455,12 +486,19 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
                     sendMidi(MidiConstants.NOTE_ON, 48, 63);
                     sendMidi(MidiConstants.NOTE_ON, 52, 63);
                     sendMidi(MidiConstants.NOTE_ON, 55, 63);
+
+                    try {
+                        Thread.sleep(60);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+
                     sendMidi(MidiConstants.NOTE_OFF, 48, 0);
                     sendMidi(MidiConstants.NOTE_OFF, 52, 0);
                     sendMidi(MidiConstants.NOTE_OFF, 55, 0);
 
                     try {
-                        Thread.sleep(98);
+                        Thread.sleep(35);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -478,16 +516,58 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
             public void run() {
                 mActivityText.append("\n Walking (" + steps + " steps)");
 
-                for (int i = 0; i < duration; i = i + 60) {
-                    sendMidi(MidiConstants.NOTE_ON, 48, 63);
-                    sendMidi(MidiConstants.NOTE_ON, 52, 63);
-                    sendMidi(MidiConstants.NOTE_ON, 55, 63);
-                    sendMidi(MidiConstants.NOTE_OFF, 48, 0);
-                    sendMidi(MidiConstants.NOTE_OFF, 52, 0);
-                    sendMidi(MidiConstants.NOTE_OFF, 55, 0);
+                int MAX_STEPS = 3000;
+                float MAX_DIST = 1000;
+
+                // Map distance to pitch
+                int note;
+                if (distance == 0) {
+                    note = 48;
+                } else {
+                    note = (int) (distance / (MAX_DIST / 100f) + 20);
+                }
+
+                // Map steps to volume between 40 and 80
+                int velocity = steps / (MAX_STEPS / 40) + 40;
+                Log.e(TAG, "steps " + steps + " to velocity " + velocity + " dist " + distance + " to note " + note);
+
+                for (int i = 0; i < duration; i = i + 149) {
+                    sendMidi(MidiConstants.NOTE_ON, note, velocity);
+                    sendMidi(MidiConstants.NOTE_ON, note + 4, velocity);
+                    sendMidi(MidiConstants.NOTE_ON, note + 7, velocity);
 
                     try {
-                        Thread.sleep(60);
+                        Thread.sleep(50);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+
+                    sendMidi(MidiConstants.NOTE_OFF, note, 0);
+                    sendMidi(MidiConstants.NOTE_OFF, note + 4, 0);
+                    sendMidi(MidiConstants.NOTE_OFF, note + 7, 0);
+
+                    try {
+                        Thread.sleep(25);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+
+                    sendMidi(MidiConstants.NOTE_ON, note - 10, velocity);
+                    sendMidi(MidiConstants.NOTE_ON, note + 4 - 10, velocity);
+                    sendMidi(MidiConstants.NOTE_ON, note + 7 - 10, velocity);
+
+                    try {
+                        Thread.sleep(50);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+
+                    sendMidi(MidiConstants.NOTE_OFF, note - 10, 0);
+                    sendMidi(MidiConstants.NOTE_OFF, note + 4 - 10, 0);
+                    sendMidi(MidiConstants.NOTE_OFF, note + 7 - 10, 0);
+
+                    try {
+                        Thread.sleep(25);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -509,7 +589,7 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
 
     private void setupIdlePlayer() {
         player = MediaPlayer.create(this, R.raw.heartbeat2);
-        player.setVolume(0.4f, 0.4f);
+        player.setVolume(0.3f, 0.3f);
         player.setLooping(true);
         player.start();
 
@@ -655,7 +735,7 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
     }
 
     public void switchToSleep() {
-        sendMidi(MidiConstants.PROGRAM_CHANGE, GeneralMidiConstants.ACOUSTIC_GRAND_PIANO);
+        sendMidi(MidiConstants.PROGRAM_CHANGE, GeneralMidiConstants.LEAD_1_SAWTOOTH);
     }
 
     // Send a midi message
