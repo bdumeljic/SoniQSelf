@@ -97,9 +97,10 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
             public void onClick(View v) {
                 mHandler.pause();
                 mPlayButton.setEnabled(false);
+                mActivityText.setText("");
                 new RetrieveDayDataTask().execute();
-                setupIdlePlayer();
-                startProgressBar();
+                //setupIdlePlayer();
+                //startProgressBar();
             }
         });
 
@@ -242,39 +243,17 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
             DataReadResult dayDataReadResult = Fitness.HistoryApi.readData(mClient, dayDataReadRequest).await(1, TimeUnit.MINUTES);
             handleActivitySegment(dayDataReadResult);
 
-            mHandler.resume();
+            //mHandler.resume();
             return null;
         }
-    }
 
-    private void startProgressBar() {
-        mProgress.setVisibility(View.VISIBLE);
-        mProgress.setMax(100);
-
-        new CountDownTimer(PLAY_DURATION_MS, 1000) {
-            public void onTick(long millisUntilFinished) {
-                float progress = (PLAY_DURATION_MS - millisUntilFinished) / (float) PLAY_DURATION_MS * 100f;
-                mProgress.setProgress((int) progress);
-            }
-
-            public void onFinish() {
-                mProgress.setVisibility(View.INVISIBLE);
-            }
-        }.start();
-    }
-
-    /**
-     * Return a {@link DataReadRequest} for all step count changes in the 24 hours.
-     */
-    private DataReadRequest queryStepsDataForDay() {
-        DataReadRequest readRequest = new DataReadRequest.Builder()
-                .aggregate(DataType.TYPE_STEP_COUNT_DELTA, DataType.AGGREGATE_STEP_COUNT_DELTA)
-                .aggregate(DataType.TYPE_DISTANCE_DELTA, DataType.AGGREGATE_DISTANCE_DELTA)
-                .bucketByActivitySegment(5, TimeUnit.MINUTES)
-                .setTimeRange(startTime, endTime, TimeUnit.MILLISECONDS)
-                .build();
-
-        return readRequest;
+        @Override
+        protected void onPostExecute(Void aVoid) {
+            super.onPostExecute(aVoid);
+            setupIdlePlayer();
+            mHandler.resume();
+            startProgressBar();
+        }
     }
 
     private DataReadRequest queryDataForDay() {
@@ -348,18 +327,12 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
 
         List<DataSet> dataSets = bucket.getDataSets();
         for (DataSet dataSet : dataSets) {
-            Log.i(TAG, "Reading dataset ");
-
             for (DataPoint dp : dataSet.getDataPoints()) {
-                Log.i(TAG, "\tType: " + dp.getDataType().getName());
                 for (final Field field : dp.getDataType().getFields()) {
-                    Log.i(TAG, "\tField: " + field.getName() +
-                            " Value: " + dp.getValue(field));
-
                     if (field.equals(Field.FIELD_STEPS)) {
-                        steps += dp.getValue(field).asInt();
+                        steps = dp.getValue(field).asInt();
                     } else if (field.equals(Field.FIELD_DISTANCE)) {
-                        distance += dp.getValue(field).asFloat();
+                        distance = dp.getValue(field).asFloat();
                     }
                 }
             }
@@ -374,31 +347,65 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
     }
 
     private void readSleepBucket(Bucket bucket) {
-        Log.i(TAG, "Reading sleep bucket ");
+        Log.i(TAG, "Reading sleep bucket " + bucket.getActivity());
 
         long startActSeg = bucket.getStartTime(TimeUnit.MILLISECONDS);
         long endActSeg = bucket.getEndTime(TimeUnit.MILLISECONDS);
 
         long duration = calculateDurationPlay(startActSeg, endActSeg);
-        int type = 0;
+
+        // 0: Default, 1: Light, 2: Deep, 3: REM
+        int type = -1;
+
+        switch (bucket.getActivity()) {
+            case FitnessActivities.SLEEP:
+                type = 0;
+                break;
+            case FitnessActivities.SLEEP_LIGHT:
+                type = 1;
+                break;
+            case FitnessActivities.SLEEP_DEEP:
+                type = 2;
+                break;
+            case FitnessActivities.SLEEP_REM:
+                type = 3;
+                break;
+        }
 
         playSleep(startActSeg, duration, type);
     }
 
     private void readActBucket(Bucket bucket) {
-        Log.i(TAG, "Reading sleep bucket ");
+        Log.i(TAG, "Reading act bucket: " + bucket.getActivity());
 
         long startActSeg = bucket.getStartTime(TimeUnit.MILLISECONDS);
         long endActSeg = bucket.getEndTime(TimeUnit.MILLISECONDS);
 
         long duration = calculateDurationPlay(startActSeg, endActSeg);
-        int type = 0;
 
-        playAct(startActSeg, duration, type);
-    }
+        int steps = 0;
+        float distance = 0;
+        float speed = 0;
+        float calories = 0;
 
-    private long calculateDurationPlay(long start, long end) {
-        return (end - start) / (DAY_DURATION_MS / PLAY_DURATION_MS);
+        List<DataSet> dataSets = bucket.getDataSets();
+        for (DataSet dataSet : dataSets) {
+            for (DataPoint dp : dataSet.getDataPoints()) {
+                for (final Field field : dp.getDataType().getFields()) {
+                    if (field.equals(Field.FIELD_STEPS)) {
+                        steps = dp.getValue(field).asInt();
+                    } else if (field.equals(Field.FIELD_DISTANCE)) {
+                        distance = dp.getValue(field).asFloat();
+                    } else if (field.equals(Field.FIELD_SPEED)) {
+                        speed = dp.getValue(field).asFloat();
+                    } else if (field.equals(Field.FIELD_CALORIES)) {
+                        calories = dp.getValue(field).asFloat();
+                    }
+                }
+            }
+        }
+
+        playAct(startActSeg, duration, bucket.getActivity(), steps, distance, speed, calories);
     }
 
     private void playSleep(long start, final long duration, int type) {
@@ -408,16 +415,23 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
                 switchToSleep();
                 mActivityText.append("\n" + "Sleeping");
 
-                for (int i = 0; i < duration; i = i + 20) {
+                for (int i = 0; i < duration; i = i + 80) {
                     sendMidi(MidiConstants.NOTE_ON, 48, 63);
                     sendMidi(MidiConstants.NOTE_ON, 52, 63);
                     sendMidi(MidiConstants.NOTE_ON, 55, 63);
+
+                    try {
+                        Thread.sleep(30);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+
                     sendMidi(MidiConstants.NOTE_OFF, 48, 0);
                     sendMidi(MidiConstants.NOTE_OFF, 52, 0);
                     sendMidi(MidiConstants.NOTE_OFF, 55, 0);
 
                     try {
-                        Thread.sleep(20);
+                        Thread.sleep(50);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -429,14 +443,15 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
         }, calculateDelay(start));
     }
 
-    private void playAct(long start, final long duration, int type) {
+    private void playAct(long start, final long duration, final String activity, int steps, float distance, float speed, float calories) {
         mHandler.postPausedDelayed(new Runnable() {
             @Override
             public void run() {
                 switchToActive();
-                mActivityText.append("\n" + "An Activity");
+                String act = activity.substring(0,1).toUpperCase() + activity.substring(1).toLowerCase();
+                mActivityText.append("\n" + act);
 
-                for (int i = 0; i < duration; i = i + 20) {
+                for (int i = 0; i < duration; i = i + 100) {
                     sendMidi(MidiConstants.NOTE_ON, 48, 63);
                     sendMidi(MidiConstants.NOTE_ON, 52, 63);
                     sendMidi(MidiConstants.NOTE_ON, 55, 63);
@@ -445,7 +460,7 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
                     sendMidi(MidiConstants.NOTE_OFF, 55, 0);
 
                     try {
-                        Thread.sleep(20);
+                        Thread.sleep(98);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -463,7 +478,7 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
             public void run() {
                 mActivityText.append("\n Walking (" + steps + " steps)");
 
-                for (int i = 0; i < duration; i = i + 20) {
+                for (int i = 0; i < duration; i = i + 60) {
                     sendMidi(MidiConstants.NOTE_ON, 48, 63);
                     sendMidi(MidiConstants.NOTE_ON, 52, 63);
                     sendMidi(MidiConstants.NOTE_ON, 55, 63);
@@ -472,7 +487,7 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
                     sendMidi(MidiConstants.NOTE_OFF, 55, 0);
 
                     try {
-                        Thread.sleep(20);
+                        Thread.sleep(60);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -482,16 +497,21 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
         }, calculateDelay(start));
     }
 
+    private long calculateDurationPlay(long start, long end) {
+        return (end - start) / (DAY_DURATION_MS / PLAY_DURATION_MS);
+    }
+
+    private long calculateDelay(long dpStartTime) {
+        float floating = (dpStartTime - startTime) / (float) DAY_DURATION_MS;
+        float result = floating * PLAY_DURATION_MS;
+        return (long) result;
+    }
+
     private void setupIdlePlayer() {
-        mHandler.postPausedDelayed(new Runnable() {
-            @Override
-            public void run() {
-                player = MediaPlayer.create(PlayDayActivity.this, R.raw.heartbeat2);
-                player.setVolume(0.2f, 0.2f);
-                player.setLooping(true);
-                player.start();
-            }
-        }, 1);
+        player = MediaPlayer.create(this, R.raw.heartbeat2);
+        player.setVolume(0.4f, 0.4f);
+        player.setLooping(true);
+        player.start();
 
         mHandler.postPausedDelayed(new Runnable() {
             @Override
@@ -559,6 +579,22 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
         }, 0);
     }
 
+    private void startProgressBar() {
+        mProgress.setVisibility(View.VISIBLE);
+        mProgress.setMax(100);
+
+        new CountDownTimer(PLAY_DURATION_MS, 1000) {
+            public void onTick(long millisUntilFinished) {
+                float progress = (PLAY_DURATION_MS - millisUntilFinished) / (float) PLAY_DURATION_MS * 100f;
+                mProgress.setProgress((int) progress);
+            }
+
+            public void onFinish() {
+                mProgress.setVisibility(View.INVISIBLE);
+            }
+        }.start();
+    }
+
     private void dumpDataSet(DataSet dataSet) {
 
         Log.i(TAG, "Data returned for Data type: " + dataSet.getDataType().getName());
@@ -574,13 +610,6 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
 
 
         }
-    }
-
-    private long calculateDelay(long dpStartTime) {
-        float floating = (dpStartTime - startTime) / (float) DAY_DURATION_MS;
-        float result = floating * PLAY_DURATION_MS;
-        Log.i(TAG, "Delay:" + result / 1000);
-        return (long) result;
     }
 
     @Override
@@ -622,11 +651,11 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
     }
 
     public void switchToActive() {
-        sendMidi(MidiConstants.PROGRAM_CHANGE, GeneralMidiConstants.ACOUSTIC_GRAND_PIANO);
+        sendMidi(MidiConstants.PROGRAM_CHANGE, GeneralMidiConstants.SLAP_BASS_0);
     }
 
     public void switchToSleep() {
-        sendMidi(MidiConstants.PROGRAM_CHANGE, GeneralMidiConstants.GUNSHOT);
+        sendMidi(MidiConstants.PROGRAM_CHANGE, GeneralMidiConstants.ACOUSTIC_GRAND_PIANO);
     }
 
     // Send a midi message
