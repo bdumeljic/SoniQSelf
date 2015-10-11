@@ -251,7 +251,7 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
         @Override
         protected void onPostExecute(Void aVoid) {
             super.onPostExecute(aVoid);
-            //setupIdlePlayer();
+            setupIdlePlayer();
             mHandler.resume();
             startProgressBar();
         }
@@ -417,7 +417,7 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
                 mActivityText.append("\n" + "Sleeping");
 
                 int note = 48;
-                int velocity = 50;
+                int velocity = 40;
 
                 int min = 0;
                 int max = 120;
@@ -493,8 +493,9 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
                 } else if (calories > 0) {
                     note = (int) (calories / (MAX_CALORIES / 40f) + 30);
                 } else {
-                    note = new Random(40).nextInt() + 31;
+                    note = new Random().nextInt(40) + 21;
                 }
+                Log.e(TAG, steps + " d " + distance);
 
                 // Map steps to velocity
                 // If there is no steps data, use distance
@@ -504,8 +505,10 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
                 } else if (distance > 0) {
                     velocity = (int) (distance / (MAX_DIST / 40f) + 40);
                 } else {
-                    velocity = new Random(40).nextInt() + 41;
+                    velocity = new Random().nextInt(40) + 21;
                 }
+
+                Log.e(TAG, note + " v " + velocity);
 
                 Random random = new Random();
 
