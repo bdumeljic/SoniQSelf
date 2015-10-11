@@ -61,7 +61,7 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
     protected MediaPlayer player;
 
     private PauseHandler mHandler;
-    private static int MINS = 1;
+    private static int MINS = 3;
     private static int DAY_DURATION_MS = 24 * 60 * 60 * 1000; // 86400000
     private static int PLAY_DURATION_MS = MINS * 60 * 1000; // 120000
 
@@ -519,16 +519,11 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
                 int MAX_STEPS = 3000;
                 float MAX_DIST = 1000;
 
-                // Map distance to pitch
-                int note;
-                if (distance == 0) {
-                    note = 48;
-                } else {
-                    note = (int) (distance / (MAX_DIST / 100f) + 20);
-                }
+                // Map number of steps to pitch between 10 and 50
+                int note = (int) (steps / (MAX_STEPS / 40f) + 30);
 
-                // Map steps to volume between 40 and 80
-                int velocity = steps / (MAX_STEPS / 40) + 40;
+                // Map distance to volume between 40 and 80
+                int velocity = (int) (steps / (MAX_DIST / 40f) + 40);
                 Log.e(TAG, "steps " + steps + " to velocity " + velocity + " dist " + distance + " to note " + note);
 
                 for (int i = 0; i < duration; i = i + 149) {
