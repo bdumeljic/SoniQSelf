@@ -1,6 +1,7 @@
 package com.bdumeljic.soniqself;
 
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 
 import java.util.ArrayList;
@@ -37,6 +38,14 @@ public class PauseHandler extends Handler {
             runnableDelayQueueBuffer.remove(0);
             postDelayed(rnble, delay);
         }
+    }
+
+    public PauseHandler(Looper looper) {
+        super(looper);
+    }
+
+    public PauseHandler() {
+        super();
     }
 
     /**

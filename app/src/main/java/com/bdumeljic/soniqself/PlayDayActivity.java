@@ -6,6 +6,7 @@ import android.media.MediaPlayer;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.CountDownTimer;
+import android.os.HandlerThread;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
@@ -60,7 +61,9 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
     protected MidiDriver midi;
     protected MediaPlayer player;
 
-    private PauseHandler mHandler;
+    private PauseHandler mUIHandler;
+    private HandlerThread mSoundThread;
+    private PauseHandler mSoundHandler;
     private static int MINS = 2;
     private static int DAY_DURATION_MS = 24 * 60 * 60 * 1000; // 86400000
     private static int PLAY_DURATION_MS = MINS * 60 * 1000; // 120000
@@ -87,8 +90,14 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
 
         midi = new MidiDriver();
 
-        mHandler = new PauseHandler();
-        mHandler.pause();
+        mSoundThread = new HandlerThread("SoundThread");
+        mSoundThread.start();
+
+        mSoundHandler = new PauseHandler(mSoundThread.getLooper());
+        mSoundHandler.pause();
+
+        mUIHandler = new PauseHandler();
+        mUIHandler.pause();
 
         mProgress = (ProgressBar) findViewById(R.id.progressBar);
 
@@ -96,12 +105,11 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
         mPlayButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                mHandler.pause();
+                mSoundHandler.pause();
+                mUIHandler.pause();
                 mPlayButton.setEnabled(false);
                 mActivityText.setText("");
                 new RetrieveDayDataTask().execute();
-                //setupIdlePlayer();
-                //startProgressBar();
             }
         });
 
@@ -244,7 +252,6 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
             DataReadResult dayDataReadResult = Fitness.HistoryApi.readData(mClient, dayDataReadRequest).await(1, TimeUnit.MINUTES);
             handleActivitySegment(dayDataReadResult);
 
-            //mHandler.resume();
             return null;
         }
 
@@ -252,8 +259,9 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
         protected void onPostExecute(Void aVoid) {
             super.onPostExecute(aVoid);
             setupIdlePlayer();
-            mHandler.resume();
-            startProgressBar();
+            setupProgressBar();
+            mSoundHandler.resume();
+            mUIHandler.resume();
         }
     }
 
@@ -410,11 +418,12 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
     }
 
     private void playSleep(long start, final long duration, final int type) {
-        mHandler.postPausedDelayed(new Runnable() {
+        long delay = calculateDelay(start);
+
+        mSoundHandler.postPausedDelayed(new Runnable() {
             @Override
             public void run() {
                 switchToSleep();
-                mActivityText.append("\n" + "Sleeping");
 
                 int note = 48;
                 int velocity = 40;
@@ -426,19 +435,16 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
                 // 0: Default, 1: Light, 2: Deep, 3: REM
                 switch (type) {
                     case 1:
-                        min = 20;
+                        min = 90;
                         max = 120;
-                        mActivityText.append(" (Light)");
                         break;
                     case 2:
-                        min = 0;
+                        min = 10;
                         max = 39;
-                        mActivityText.append(" (Deep)");
                         break;
                     case 3:
                         min = 50;
                         max = 69;
-                        mActivityText.append(" (REM)");
                         break;
                 }
 
@@ -471,16 +477,36 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
                 switchToFootSteps();
 
             }
-        }, calculateDelay(start));
+        }, delay);
+
+        mUIHandler.postPausedDelayed(new Runnable() {
+            @Override
+            public void run() {
+                mActivityText.append("\n" + "Sleeping");
+
+                switch (type) {
+                    case 1:
+                        mActivityText.append(" (Light)");
+                        break;
+                    case 2:
+                        mActivityText.append(" (Deep)");
+                        break;
+                    case 3:
+                        mActivityText.append(" (REM)");
+                        break;
+                }
+
+            }
+        }, delay);
     }
 
     private void playAct(long start, final long duration, final String activity, final int steps, final float distance, final float speed, final float calories) {
-        mHandler.postPausedDelayed(new Runnable() {
+        long delay = calculateDelay(start);
+
+        mSoundHandler.postPausedDelayed(new Runnable() {
             @Override
             public void run() {
                 switchToActive();
-                String act = activity.substring(0,1).toUpperCase() + activity.substring(1).toLowerCase();
-                mActivityText.append("\n" + act);
 
                 int note;
                 int velocity;
@@ -539,7 +565,15 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
                 switchToFootSteps();
 
             }
-        }, calculateDelay(start));
+        }, delay);
+
+        mUIHandler.postPausedDelayed(new Runnable() {
+            @Override
+            public void run() {
+                String act = activity.substring(0, 1).toUpperCase() + activity.substring(1).toLowerCase();
+                mActivityText.append("\n" + act);
+            }
+        }, delay);
     }
 
     int MAX_STEPS = 2000;
@@ -548,12 +582,12 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
     float MAX_CALORIES = 450;
 
     private void playSteps(long start, final long duration, final int steps, final float distance) {
-        mHandler.postPausedDelayed(new Runnable() {
+        long delay = calculateDelay(start);
+
+        mSoundHandler.postPausedDelayed(new Runnable() {
             @Override
             public void run() {
-                mActivityText.append("\n Walking (" + steps + " steps)");
-
-                // Map number of steps to pitch between 10 and 50
+                // Map number of steps to pitch between 30 and 70
                 int note = (int) (steps / (MAX_STEPS / 40f) + 30);
 
                 // Map distance to volume between 40 and 80
@@ -587,7 +621,14 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
                 }
 
             }
-        }, calculateDelay(start));
+        }, delay);
+
+        mUIHandler.postPausedDelayed(new Runnable() {
+            @Override
+            public void run() {
+                mActivityText.append("\n Walking (" + steps + " steps)");
+            }
+        }, delay);
     }
 
     private long calculateDurationPlay(long start, long end) {
@@ -606,7 +647,7 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
         player.setLooping(true);
         player.start();
 
-        mHandler.postPausedDelayed(new Runnable() {
+        /*mSoundHandler.postPausedDelayed(new Runnable() {
             @Override
             public void run() {
                 if (player != null && player.isPlaying()) {
@@ -614,78 +655,44 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
                     player.seekTo(0);
                 }
 
+            }
+        }, PLAY_DURATION_MS);*/
+
+        mUIHandler.postPausedDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (player != null) {
+                    
+                    //player.pause();
+                    //player.seekTo(0);
+                    player.stop();
+                }
+
                 mPlayButton.setEnabled(true);
             }
         }, PLAY_DURATION_MS);
     }
 
-    private void playTestSound() {
-        mHandler.postPausedDelayed(new Runnable() {
+
+    private void setupProgressBar() {
+        mUIHandler.postPausedDelayed(new Runnable() {
             @Override
             public void run() {
-                mActivityText.append("\n test");
+                mProgress.setVisibility(View.VISIBLE);
+                mProgress.setMax(100);
 
-                switchToFootSteps();
+                new CountDownTimer(PLAY_DURATION_MS, 1000) {
+                    public void onTick(long millisUntilFinished) {
+                        float progress = (PLAY_DURATION_MS - millisUntilFinished) / (float) PLAY_DURATION_MS * 100f;
+                        mProgress.setProgress((int) progress);
+                    }
 
-                sendMidi(MidiConstants.NOTE_ON, 48, 35);
-                try {
-                    Thread.sleep(200);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-
-                sendMidi(MidiConstants.NOTE_ON, 52, 35);
-                try {
-                    Thread.sleep(200);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-
-                sendMidi(MidiConstants.NOTE_ON, 55, 35);
-                /*try {
-                    Thread.sleep(200);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-
-                sendMidi(MidiConstants.NOTE_OFF, 48, 0);
-                sendMidi(MidiConstants.NOTE_OFF, 52, 0);
-                sendMidi(MidiConstants.NOTE_OFF, 55, 0);
-
-               /* try {
-                    Thread.sleep(200);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-
-                switchToSleep();
-
-                sendMidi(MidiConstants.NOTE_ON, 48, 35);
-                sendMidi(MidiConstants.NOTE_ON, 52, 35);
-                sendMidi(MidiConstants.NOTE_ON, 55, 35);
-                sendMidi(MidiConstants.NOTE_OFF, 48, 0);
-                sendMidi(MidiConstants.NOTE_OFF, 52, 0);
-                sendMidi(MidiConstants.NOTE_OFF, 55, 0);
-
-                switchToFootSteps();*/
+                    public void onFinish() {
+                        mProgress.setVisibility(View.INVISIBLE);
+                    }
+                }.start();
             }
         }, 0);
-    }
-
-    private void startProgressBar() {
-        mProgress.setVisibility(View.VISIBLE);
-        mProgress.setMax(100);
-
-        new CountDownTimer(PLAY_DURATION_MS, 1000) {
-            public void onTick(long millisUntilFinished) {
-                float progress = (PLAY_DURATION_MS - millisUntilFinished) / (float) PLAY_DURATION_MS * 100f;
-                mProgress.setProgress((int) progress);
-            }
-
-            public void onFinish() {
-                mProgress.setVisibility(View.INVISIBLE);
-            }
-        }.start();
     }
 
     private void dumpDataSet(DataSet dataSet) {
