@@ -21,6 +21,7 @@ import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.Scope;
 import com.google.android.gms.fitness.Fitness;
 import com.google.android.gms.fitness.FitnessActivities;
+import com.google.android.gms.fitness.FitnessStatusCodes;
 import com.google.android.gms.fitness.data.Bucket;
 import com.google.android.gms.fitness.data.DataPoint;
 import com.google.android.gms.fitness.data.DataSet;
@@ -170,20 +171,30 @@ public class PlayDayActivity extends AppCompatActivity implements MidiDriver.OnM
                                             PlayDayActivity.this, 0).show();
                                     return;
                                 }
-                                // The failure has a resolution. Resolve it.
+
+                                if (result.getErrorCode() == ConnectionResult.SIGN_IN_REQUIRED ||
+                                        result.getErrorCode() == FitnessStatusCodes.NEEDS_OAUTH_PERMISSIONS) {
+                                    try {
+                                        // Request authentication
+                                        result.startResolutionForResult(PlayDayActivity.this, REQUEST_OAUTH);
+                                    } catch (IntentSender.SendIntentException e) {
+                                        Log.e(TAG, "Exception connecting to the fitness service", e);
+                                    }
+                                }
+
+                                /*// The failure has a resolution. Resolve it.
                                 // Called typically when the app is not yet authorized, and an
                                 // authorization dialog is displayed to the user.
                                 if (!authInProgress) {
                                     try {
                                         Log.i(TAG, "Attempting to resolve failed connection");
                                         authInProgress = true;
-                                        result.startResolutionForResult(PlayDayActivity.this,
-                                                REQUEST_OAUTH);
+                                        result.startResolutionForResult(PlayDayActivity.this, REQUEST_OAUTH);
                                     } catch (IntentSender.SendIntentException e) {
                                         Log.e(TAG,
                                                 "Exception while starting resolution activity", e);
                                     }
-                                }
+                                }*/
                             }
                         }
                 )

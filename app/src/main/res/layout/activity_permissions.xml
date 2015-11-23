@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:theme="@style/SoniQTheme"
+    tools:context="com.bdumeljic.soniqself.PermissionsActivity">
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:id="@+id/imageView"
+        android:src="@drawable/background2"
+        android:scaleType="centerCrop" />
+
+    <LinearLayout
+        android:id="@+id/need_permission"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/black_overlay"
+        android:layout_gravity="center"
+        android:layout_centerInParent="true"
+        android:orientation="vertical"
+        android:gravity="center_vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/need_permission"
+            android:textAlignment="center"
+            android:textAppearance="@style/Base.TextAppearance.AppCompat.Headline"
+            android:padding="16dp"
+            android:layout_gravity="center" />
+
+        <Button
+            android:id="@+id/need_permission_button"
+            style="?metaButtonBarButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/need_permission_button"
+            android:textAppearance="@style/Base.TextAppearance.AppCompat.Headline"
+            android:textStyle="bold"
+            android:paddingLeft="64dp"
+            android:paddingTop="64dp"
+            android:paddingRight="64dp"
+            android:paddingBottom="16dp"
+            android:layout_gravity="center" />
+    </LinearLayout>
+
+</RelativeLayout>

@@ -1,9 +1,9 @@
 <resources>
     <string name="app_name">SoniQSelf</string>
 
-    <string name="dummy_button">Dummy Button</string>
-    <string name="dummy_content">DUMMY\nCONTENT</string>
-
     <string name="play_button">PLAY MY DAY</string>
     <string name="placeholder">Activity</string>
+
+    <string name="need_permission_button">GIVE PERMISSION</string>
+    <string name="need_permission">SoniQSelf needs access to your location to get your data from Google Fit.</string>
 </resources>
